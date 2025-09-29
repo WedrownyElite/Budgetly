@@ -5,6 +5,9 @@ import '../services/plaid_service.dart';
 import '../services/storage_service.dart';
 import '../widgets/transaction_list_widget.dart';
 import '../widgets/spending_chart_widget.dart';
+import 'budgets_screen.dart';
+import 'goals_screen.dart';
+import 'recurring_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -100,6 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
       isConnected = false;
       accessToken = null;
       transactions.clear();
+      _selectedIndex = 0;
     });
     _showSuccess('Bank account disconnected');
   }
@@ -119,10 +123,54 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Budgetly')),
-      body: isConnected
-          ? _buildConnectedView()
-          : _buildDisconnectedView(),
+      appBar: AppBar(
+        title: const Text('Budgetly'),
+        actions: isConnected
+            ? [
+          IconButton(
+            icon: const Icon(Icons.account_balance_wallet),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => BudgetsScreen(
+                    transactions: transactions,
+                  ),
+                ),
+              );
+            },
+            tooltip: 'Budgets',
+          ),
+          IconButton(
+            icon: const Icon(Icons.flag),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const GoalsScreen(),
+                ),
+              );
+            },
+            tooltip: 'Goals',
+          ),
+          IconButton(
+            icon: const Icon(Icons.repeat),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => RecurringScreen(
+                    transactions: transactions,
+                  ),
+                ),
+              );
+            },
+            tooltip: 'Recurring',
+          ),
+        ]
+            : null,
+      ),
+      body: isConnected ? _buildConnectedView() : _buildDisconnectedView(),
       bottomNavigationBar: isConnected
           ? BottomNavigationBar(
         currentIndex: _selectedIndex,
@@ -159,7 +207,11 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 16),
           const Text(
             'Disconnected',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.red),
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.red,
+            ),
           ),
           const SizedBox(height: 16),
           ElevatedButton(
@@ -189,7 +241,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Icon(Icons.check_circle, color: Colors.green),
                   SizedBox(width: 8),
-                  Text('Connected', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text(
+                    'Connected',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ],
               ),
               ElevatedButton(
@@ -210,7 +265,9 @@ class _HomeScreenState extends State<HomeScreen> {
               onRefresh: _fetchTransactions,
             )
                 : SingleChildScrollView(
-              child: SpendingChartWidget(transactions: transactions),
+              child: SpendingChartWidget(
+                transactions: transactions,
+              ),
             ),
           ),
         ],
