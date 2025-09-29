@@ -8,6 +8,7 @@ import '../widgets/spending_chart_widget.dart';
 import 'budgets_screen.dart';
 import 'goals_screen.dart';
 import 'recurring_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -165,17 +166,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1419),
-      appBar: isConnected ? _buildConnectedAppBar() : null,
-      body: isConnected ? _buildConnectedView() : _buildDisconnectedView(),
-      bottomNavigationBar: isConnected ? _buildBottomNav() : null,
+      backgroundColor: isDark ? const Color(0xFF0F1419) : const Color(0xFFF5F5F7),
+      appBar: isConnected ? _buildConnectedAppBar(isDark) : null,
+      body: isConnected ? _buildConnectedView(isDark) : _buildDisconnectedView(isDark),
+      bottomNavigationBar: isConnected ? _buildBottomNav(isDark) : null,
     );
   }
 
-  PreferredSizeWidget _buildConnectedAppBar() {
+  PreferredSizeWidget _buildConnectedAppBar(bool isDark) {
     return AppBar(
-      backgroundColor: const Color(0xFF1A1F29),
+      backgroundColor: isDark ? const Color(0xFF1A1F29) : Colors.white,
       elevation: 0,
       title: Row(
         children: [
@@ -190,18 +193,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             child: const Icon(Icons.account_balance_wallet, size: 20),
           ),
           const SizedBox(width: 12),
-          const Text(
+          Text(
             'Budgetly',
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
               letterSpacing: -0.5,
+              color: isDark ? Colors.white : Colors.black87,
             ),
           ),
         ],
       ),
       actions: [
-        _buildAppBarButton(Icons.account_balance_wallet, 'Budgets', () {
+        _buildAppBarButton(Icons.account_balance_wallet, 'Budgets', isDark, () {
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -209,13 +213,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
           );
         }),
-        _buildAppBarButton(Icons.flag_outlined, 'Goals', () {
+        _buildAppBarButton(Icons.flag_outlined, 'Goals', isDark, () {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const GoalsScreen()),
           );
         }),
-        _buildAppBarButton(Icons.autorenew, 'Recurring', () {
+        _buildAppBarButton(Icons.autorenew, 'Recurring', isDark, () {
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -223,12 +227,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
           );
         }),
+        _buildAppBarButton(Icons.settings, 'Settings', isDark, () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const SettingsScreen()),
+          );
+        }),
         const SizedBox(width: 8),
       ],
     );
   }
 
-  Widget _buildAppBarButton(IconData icon, String tooltip, VoidCallback onPressed) {
+  Widget _buildAppBarButton(IconData icon, String tooltip, bool isDark, VoidCallback onPressed) {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: Material(
@@ -239,25 +249,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           child: Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: const Color(0xFF262D3D),
+              color: isDark ? const Color(0xFF262D3D) : Colors.grey.shade200,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, size: 20),
+            child: Icon(icon, size: 20, color: isDark ? Colors.white : Colors.black87),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildBottomNav() {
+  Widget _buildBottomNav(bool isDark) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1A1F29),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1A1F29) : Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black26,
+            color: isDark ? Colors.black26 : Colors.grey.shade300,
             blurRadius: 20,
-            offset: Offset(0, -5),
+            offset: const Offset(0, -5),
           ),
         ],
       ),
@@ -267,8 +277,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavItem(Icons.receipt_long, 'Transactions', 0),
-              _buildNavItem(Icons.bar_chart_rounded, 'Analytics', 1),
+              _buildNavItem(Icons.receipt_long, 'Transactions', 0, isDark),
+              _buildNavItem(Icons.bar_chart_rounded, 'Analytics', 1, isDark),
             ],
           ),
         ),
@@ -276,7 +286,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildNavItem(IconData icon, String label, int index) {
+  Widget _buildNavItem(IconData icon, String label, int index, bool isDark) {
     final isSelected = _selectedIndex == index;
     return GestureDetector(
       onTap: () => setState(() => _selectedIndex = index),
@@ -296,7 +306,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           children: [
             Icon(
               icon,
-              color: isSelected ? Colors.white : Colors.grey,
+              color: isSelected
+                  ? Colors.white
+                  : (isDark ? Colors.grey : Colors.grey.shade600),
               size: 22,
             ),
             if (isSelected) ...[
@@ -316,13 +328,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildDisconnectedView() {
+  Widget _buildDisconnectedView(bool isDark) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF0F1419), Color(0xFF1A1F29)],
+          colors: isDark
+              ? [const Color(0xFF0F1419), const Color(0xFF1A1F29)]
+              : [const Color(0xFFF5F5F7), Colors.white],
         ),
       ),
       child: Center(
@@ -358,12 +372,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
               ),
               const SizedBox(height: 40),
-              const Text(
+              Text(
                 'Welcome to Budgetly',
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: isDark ? Colors.white : Colors.black87,
                   letterSpacing: -1,
                 ),
               ),
@@ -373,7 +387,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16,
-                  color: Colors.grey[400],
+                  color: isDark ? Colors.grey[400] : Colors.grey[600],
                   height: 1.5,
                 ),
               ),
@@ -433,13 +447,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.lock_outline, size: 16, color: Colors.grey[600]),
+                  Icon(
+                    Icons.lock_outline,
+                    size: 16,
+                    color: isDark ? Colors.grey[600] : Colors.grey[500],
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     'Secured by Plaid',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey[600],
+                      color: isDark ? Colors.grey[600] : Colors.grey[500],
                     ),
                   ),
                 ],
@@ -451,15 +469,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildConnectedView() {
+  Widget _buildConnectedView(bool isDark) {
     return FadeTransition(
       opacity: _fadeAnimation,
       child: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF0F1419), Color(0xFF1A1F29)],
+            colors: isDark
+                ? [const Color(0xFF0F1419), const Color(0xFF1A1F29)]
+                : [const Color(0xFFF5F5F7), Colors.white],
           ),
         ),
         child: Column(
@@ -468,10 +488,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               margin: const EdgeInsets.all(16),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF1A1F29),
+                color: isDark ? const Color(0xFF1A1F29) : Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                  color: isDark
+                      ? const Color(0xFF6366F1).withValues(alpha: 0.3)
+                      : Colors.grey.shade300,
                   width: 1,
                 ),
               ),
@@ -488,14 +510,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     child: const Icon(Icons.check, color: Colors.white, size: 20),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           'Connected',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: isDark ? Colors.white : Colors.black87,
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
                           ),
@@ -503,7 +525,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         Text(
                           'Your account is synced',
                           style: TextStyle(
-                            color: Colors.grey,
+                            color: isDark ? Colors.grey : Colors.grey.shade600,
                             fontSize: 12,
                           ),
                         ),

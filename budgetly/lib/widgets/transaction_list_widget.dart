@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../models/transaction.dart';
 
 class TransactionListWidget extends StatelessWidget {
@@ -57,8 +58,50 @@ class TransactionListWidget extends StatelessWidget {
     }
   }
 
+  Map<String, List<Transaction>> _groupTransactionsByDate() {
+    final Map<String, List<Transaction>> grouped = {};
+
+    for (var transaction in transactions) {
+      final date = transaction.date;
+      if (!grouped.containsKey(date)) {
+        grouped[date] = [];
+      }
+      grouped[date]!.add(transaction);
+    }
+
+    return grouped;
+  }
+
+  String _formatDateHeader(String dateString) {
+    try {
+      final date = DateTime.parse(dateString);
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final yesterday = today.subtract(const Duration(days: 1));
+      final transactionDate = DateTime(date.year, date.month, date.day);
+
+      if (transactionDate == today) {
+        return 'Today';
+      } else if (transactionDate == yesterday) {
+        return 'Yesterday';
+      } else {
+        return DateFormat('EEEE, MMM d, yyyy').format(date);
+      }
+    } catch (e) {
+      return dateString;
+    }
+  }
+
+  double _getDailyTotal(List<Transaction> transactions) {
+    return transactions
+        .where((t) => t.isExpense && t.spendingCategory != SpendingCategory.transfer)
+        .fold(0, (sum, t) => sum + t.amount);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Column(
       children: [
         Padding(
@@ -66,12 +109,12 @@ class TransactionListWidget extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'Recent Activity',
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: isDark ? Colors.white : Colors.black87,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -83,13 +126,15 @@ class TransactionListWidget extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF262D3D),
+                      color: isDark
+                          ? const Color(0xFF262D3D)
+                          : Colors.grey.shade200,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.refresh_rounded,
                       size: 20,
-                      color: Colors.white70,
+                      color: isDark ? Colors.white70 : Colors.black87,
                     ),
                   ),
                 ),
@@ -121,12 +166,12 @@ class TransactionListWidget extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
-                const Text(
+                Text(
                   'Loading transactions...',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: isDark ? Colors.white : Colors.black87,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -134,7 +179,7 @@ class TransactionListWidget extends StatelessWidget {
                   'This may take a few seconds',
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.grey[500],
+                    color: isDark ? Colors.grey[500] : Colors.grey[600],
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -150,126 +195,174 @@ class TransactionListWidget extends StatelessWidget {
               ],
             ),
           )
-              : ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            itemCount: transactions.length,
-            itemBuilder: (context, index) {
-              final transaction = transactions[index];
-              final categoryColor = _getCategoryColor(
-                transaction.spendingCategory.group,
-              );
-              final categoryIcon = _getCategoryIcon(
-                transaction.spendingCategory.group,
-              );
+              : _buildGroupedTransactionsList(isDark),
+        ),
+      ],
+    );
+  }
 
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1F29),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: const Color(0xFF262D3D),
-                    width: 1,
+  Widget _buildGroupedTransactionsList(bool isDark) {
+    final groupedTransactions = _groupTransactionsByDate();
+    final sortedDates = groupedTransactions.keys.toList()
+      ..sort((a, b) => b.compareTo(a)); // Sort in descending order (newest first)
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemCount: sortedDates.length,
+      itemBuilder: (context, index) {
+        final date = sortedDates[index];
+        final dateTransactions = groupedTransactions[date]!;
+        final dailyTotal = _getDailyTotal(dateTransactions);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _formatDateHeader(date),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  if (dailyTotal > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF262D3D)
+                            : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '-\$${dailyTotal.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white70 : Colors.black87,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            ...dateTransactions.map((transaction) {
+              return _buildTransactionCard(transaction, isDark);
+            }),
+            const SizedBox(height: 8),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildTransactionCard(Transaction transaction, bool isDark) {
+    final categoryColor = _getCategoryColor(
+      transaction.spendingCategory.group,
+    );
+    final categoryIcon = _getCategoryIcon(
+      transaction.spendingCategory.group,
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1A1F29) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? const Color(0xFF262D3D) : Colors.grey.shade300,
+          width: 1,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            // Could add transaction details modal here
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: categoryColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    categoryIcon,
+                    color: categoryColor,
+                    size: 24,
                   ),
                 ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(16),
-                    onTap: () {
-                      // Could add transaction details modal here
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: categoryColor.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              categoryIcon,
-                              color: categoryColor,
-                              size: 24,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  transaction.merchantName.isNotEmpty
-                                      ? transaction.merchantName
-                                      : transaction.accountName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 15,
-                                    color: Colors.white,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  transaction.displayCategory,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: categoryColor.withValues(alpha: 0.8),
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  transaction.date,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: transaction.isExpense
-                                      ? const Color(0xFFE53E3E).withValues(alpha: 0.15)
-                                      : const Color(0xFF48BB78).withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  '${transaction.isExpense ? '-' : '+'}\${transaction.amount.abs().toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: transaction.isExpense
-                                        ? const Color(0xFFE53E3E)
-                                        : const Color(0xFF48BB78),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        transaction.merchantName.isNotEmpty
+                            ? transaction.merchantName
+                            : transaction.accountName,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                      const SizedBox(height: 4),
+                      Text(
+                        transaction.displayCategory,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: categoryColor.withValues(alpha: 0.8),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: transaction.isExpense
+                        ? const Color(0xFFE53E3E).withValues(alpha: 0.15)
+                        : const Color(0xFF48BB78).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${transaction.isExpense ? '-' : '+'}\$${transaction.amount.abs().toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: transaction.isExpense
+                          ? const Color(0xFFE53E3E)
+                          : const Color(0xFF48BB78),
                     ),
                   ),
                 ),
-              );
-            },
+              ],
+            ),
           ),
         ),
-      ],
+      ),
     );
   }
 }
