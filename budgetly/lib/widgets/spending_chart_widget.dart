@@ -170,8 +170,8 @@ class SpendingChartWidget extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: changePercent > 0
-                            ? Colors.red.withOpacity(0.1)
-                            : Colors.green.withOpacity(0.1),
+                            ? Colors.red.withValues(alpha:0.1)
+                            : Colors.green.withValues(alpha:0.1),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
@@ -257,7 +257,7 @@ class SpendingChartWidget extends StatelessWidget {
                       dotData: const FlDotData(show: true),
                       belowBarData: BarAreaData(
                         show: true,
-                        color: Colors.blue.withOpacity(0.1),
+                        color: Colors.blue.withValues(alpha:0.1),
                       ),
                     ),
                   ],
@@ -320,7 +320,7 @@ class SpendingChartWidget extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: entry.key.color.withOpacity(0.2),
+                  backgroundColor: entry.key.color.withValues(alpha:0.2),
                   child: Icon(
                     Icons.category,
                     color: entry.key.color,

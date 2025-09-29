@@ -104,7 +104,7 @@ class RecurringScreen extends StatelessWidget {
 
   Widget _buildSummaryCard(String title, double amount, Color color, IconData icon) {
     return Card(
-      color: color.withOpacity(0.1),
+      color: color.withValues(alpha:0.1),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -147,7 +147,7 @@ class RecurringScreen extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       child: ExpansionTile(
         leading: CircleAvatar(
-          backgroundColor: recurring.category.group.color.withOpacity(0.2),
+          backgroundColor: recurring.category.group.color.withValues(alpha:0.2),
           child: Icon(
             recurring.isSubscription ? Icons.subscriptions : Icons.repeat,
             color: recurring.category.group.color,

@@ -51,7 +51,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<GoalType>(
-                  value: selectedType,
+                  initialValue: selectedType,
                   decoration: const InputDecoration(labelText: 'Goal Type'),
                   items: GoalType.values.map((type) {
                     return DropdownMenuItem(
@@ -176,7 +176,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
               controller: currentController,
               decoration: const InputDecoration(
                   labelText: 'Current Amount',
-                  prefixText: '\,
+                  prefixText: '\$',
               ),
               keyboardType: TextInputType.number,
             ),
