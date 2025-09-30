@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/budget.dart';
 import '../models/transaction.dart';
 import '../services/budget_storage_service.dart';
+import '../services/accessibility_service.dart';
 
 class BudgetsScreen extends StatefulWidget {
   final List<Transaction> transactions;
@@ -26,10 +27,12 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
 
   Future<void> _loadBudgets() async {
     final budgets = await _storageService.getBudgets();
-    setState(() {
-      _budgets = budgets;
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _budgets = budgets;
+        _isLoading = false;
+      });
+    }
   }
 
   Map<CategoryGroup, double> _calculateSpendingByCategory() {
@@ -71,24 +74,30 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            DropdownButtonFormField<CategoryGroup>(
-              decoration: const InputDecoration(labelText: 'Category'),
-              items: CategoryGroup.values.map((category) {
-                return DropdownMenuItem(
-                  value: category,
-                  child: Text(category.displayName),
-                );
-              }).toList(),
-              onChanged: (value) => selectedCategory = value,
+            Semantics(
+              label: 'Select category for budget',
+              child: DropdownButtonFormField<CategoryGroup>(
+                decoration: const InputDecoration(labelText: 'Category'),
+                items: CategoryGroup.values.map((category) {
+                  return DropdownMenuItem(
+                    value: category,
+                    child: Text(category.displayName),
+                  );
+                }).toList(),
+                onChanged: (value) => selectedCategory = value,
+              ),
             ),
             const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                labelText: 'Monthly Limit',
-                prefixText: '\$',
+            Semantics(
+              label: 'Enter monthly budget limit in dollars',
+              child: TextField(
+                controller: controller,
+                decoration: const InputDecoration(
+                  labelText: 'Monthly Limit',
+                  prefixText: '\$',
+                ),
+                keyboardType: TextInputType.number,
               ),
-              keyboardType: TextInputType.number,
             ),
           ],
         ),
@@ -112,6 +121,7 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
 
                 if (context.mounted) {
                   Navigator.pop(context);
+                  AccessibilityService.announce(context, 'Budget added successfully');
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Budget added successfully')),
                   );
@@ -132,13 +142,16 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Edit ${budget.category.displayName} Budget'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Monthly Limit',
-            prefixText: '\$',
+        content: Semantics(
+          label: 'Edit monthly budget limit in dollars',
+          child: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              labelText: 'Monthly Limit',
+              prefixText: '\$',
+            ),
+            keyboardType: TextInputType.number,
           ),
-          keyboardType: TextInputType.number,
         ),
         actions: [
           TextButton(
@@ -151,6 +164,7 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
               await _loadBudgets();
               if (context.mounted) {
                 Navigator.pop(context);
+                AccessibilityService.announce(context, 'Budget deleted');
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Budget deleted')),
                 );
@@ -170,6 +184,7 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
 
                 if (context.mounted) {
                   Navigator.pop(context);
+                  AccessibilityService.announce(context, 'Budget updated successfully');
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Budget updated')),
                   );
@@ -186,8 +201,11 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        body: Semantics(
+          label: 'Loading budgets',
+          child: const Center(child: CircularProgressIndicator()),
+        ),
       );
     }
 
@@ -197,9 +215,13 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
       appBar: AppBar(
         title: const Text('Budgets'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: _showAddBudgetDialog,
+          Semantics(
+            button: true,
+            label: 'Add new budget',
+            child: IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: _showAddBudgetDialog,
+            ),
           ),
         ],
       ),
@@ -219,91 +241,128 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
           ],
         ),
       )
-          : ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: budgetStatuses.length,
-        itemBuilder: (context, index) {
-          final status = budgetStatuses[index];
-          return _buildBudgetCard(status);
-        },
+          : Semantics(
+        label: '${budgetStatuses.length} budgets',
+        child: ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: budgetStatuses.length,
+          itemBuilder: (context, index) {
+            return _buildBudgetCard(budgetStatuses[index]);
+          },
+        ),
       ),
     );
   }
 
   Widget _buildBudgetCard(BudgetStatus status) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: InkWell(
-        onTap: () => _showEditBudgetDialog(status.budget),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    final semanticLabel = AccessibilityService.budgetSemanticLabel(
+      category: status.budget.category.displayName,
+      spent: status.spent,
+      limit: status.budget.monthlyLimit,
+      percentUsed: status.percentUsed,
+      isOverBudget: status.isOverBudget,
+    );
+
+    return Semantics(
+      button: true,
+      label: '$semanticLabel, double tap to edit',
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 16),
+        child: InkWell(
+          onTap: () => _showEditBudgetDialog(status.budget),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: ExcludeSemantics(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    status.budget.category.displayName,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          status.budget.category.displayName,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Icon(
+                        status.isOverBudget ? Icons.warning : Icons.check_circle,
+                        color: status.statusColor,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          'Spent: \$${status.spent.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            color: status.statusColor,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          'Budget: \$${status.budget.monthlyLimit.toStringAsFixed(2)}',
+                          style: const TextStyle(color: Colors.grey),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Semantics(
+                    label: '${status.percentUsed.toStringAsFixed(1)} percent of budget used',
+                    child: LinearProgressIndicator(
+                      value: (status.percentUsed / 100).clamp(0, 1),
+                      backgroundColor: Colors.grey[200],
+                      valueColor: AlwaysStoppedAnimation<Color>(status.statusColor),
+                      minHeight: 8,
                     ),
                   ),
-                  Icon(
-                    status.isOverBudget ? Icons.warning : Icons.check_circle,
-                    color: status.statusColor,
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          '${status.percentUsed.toStringAsFixed(1)}% used',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          status.isOverBudget
+                              ? 'Over by \$${(-status.remaining).toStringAsFixed(2)}'
+                              : '\$${status.remaining.toStringAsFixed(2)} remaining',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: status.statusColor,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.end,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Spent: \$${status.spent.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      color: status.statusColor,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  Text(
-                    'Budget: \$${status.budget.monthlyLimit.toStringAsFixed(2)}',
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              LinearProgressIndicator(
-                value: (status.percentUsed / 100).clamp(0, 1),
-                backgroundColor: Colors.grey[200],
-                valueColor: AlwaysStoppedAnimation<Color>(status.statusColor),
-                minHeight: 8,
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    '${status.percentUsed.toStringAsFixed(1)}% used',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                  Text(
-                    status.isOverBudget
-                        ? 'Over by \$${(-status.remaining).toStringAsFixed(2)}'
-                        : '\$${status.remaining.toStringAsFixed(2)} remaining',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: status.statusColor,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
         ),
       ),

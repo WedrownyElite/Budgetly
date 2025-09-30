@@ -169,15 +169,18 @@ class SpendingChartWidget extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: changePercent > 0
-                            ? Colors.red.withValues(alpha:0.1)
-                            : Colors.green.withValues(alpha:0.1),
+                            ? Colors.red.withValues(alpha: 0.1)
+                            : Colors.green.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Text(
-                        '${changePercent > 0 ? '+' : ''}${changePercent.toStringAsFixed(1)}% vs last month',
-                        style: TextStyle(
-                          color: changePercent > 0 ? Colors.red : Colors.green,
-                          fontWeight: FontWeight.bold,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '${changePercent > 0 ? '+' : ''}${changePercent.toStringAsFixed(1)}% vs last month',
+                          style: TextStyle(
+                            color: changePercent > 0 ? Colors.red : Colors.green,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
@@ -191,9 +194,12 @@ class SpendingChartWidget extends StatelessWidget {
 
         // Spending Trend Chart
         if (recentMonths.length > 1) ...[
-          const Text(
-            'Spending Trend',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          const FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              'Spending Trend',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
           ),
           const SizedBox(height: 16),
           SizedBox(
@@ -269,9 +275,12 @@ class SpendingChartWidget extends StatelessWidget {
 
         // Pie Chart for Spending Categories
         const Center(
-          child: Text(
-            'Spending by Category',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              'Spending by Category',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
           ),
         ),
         const SizedBox(height: 24),
@@ -367,6 +376,7 @@ class SpendingChartWidget extends StatelessWidget {
                           title: Text(
                             transaction.merchantName,
                             style: const TextStyle(fontSize: 14),
+                            overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text(
                             transaction.date,
@@ -374,12 +384,16 @@ class SpendingChartWidget extends StatelessWidget {
                               fontSize: 12,
                               color: Colors.grey[600],
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          trailing: Text(
-                            '\$${transaction.amount.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
+                          trailing: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '\$${transaction.amount.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         );
@@ -390,23 +404,30 @@ class SpendingChartWidget extends StatelessWidget {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'Total (${categoryTransactions.length} transactions)',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
+                          Flexible(
+                            child: Text(
+                              'Total (${categoryTransactions.length} transactions)',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          Text(
-                            '\$${entry.value.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                          const SizedBox(width: 8),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '\$${entry.value.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ),
+                    )
                   ],
                 ),
               );
@@ -418,46 +439,60 @@ class SpendingChartWidget extends StatelessWidget {
   }
 
   Widget _buildSummaryItem(String label, double amount, Color color) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '\$${amount.abs().toStringAsFixed(2)}',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: color,
+    return Flexible(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            overflow: TextOverflow.ellipsis,
           ),
-        ),
-      ],
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              '\$${amount.abs().toStringAsFixed(2)}',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildMonthSummary(String month, double amount, bool isCurrent) {
-    return Column(
-      children: [
-        Text(
-          month,
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.grey[600],
-            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+    return Flexible(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            month,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
+              fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+            ),
+            overflow: TextOverflow.ellipsis,
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '\$${amount.toStringAsFixed(2)}',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: isCurrent ? Colors.blue : Colors.grey[700],
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              '\$${amount.toStringAsFixed(2)}',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: isCurrent ? Colors.blue : Colors.grey[700],
+              ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -480,20 +515,27 @@ class SpendingChartWidget extends StatelessWidget {
   }
 
   Widget _buildLegendItem(String label, Color color, double amount) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 16,
-          height: 16,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
+    return Flexible(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Text('$label: \$${amount.toStringAsFixed(2)}'),
-      ],
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              '$label: \$${amount.toStringAsFixed(2)}',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
