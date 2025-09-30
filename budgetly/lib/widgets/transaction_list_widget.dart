@@ -261,7 +261,7 @@ class TransactionListWidget extends StatelessWidget {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              '-\${dailyTotal.toStringAsFixed(2)}',
+                              '-\$${dailyTotal.toStringAsFixed(2)}',
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
@@ -379,7 +379,7 @@ class TransactionListWidget extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          '${transaction.isExpense ? '-' : '+'}\${transaction.amount.abs().toStringAsFixed(2)}',
+                          '${transaction.isExpense ? '-' : '+'}\$${transaction.amount.abs().toStringAsFixed(2)}',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 15,

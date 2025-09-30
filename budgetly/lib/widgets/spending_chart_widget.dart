@@ -389,7 +389,7 @@ class SpendingChartWidget extends StatelessWidget {
                           trailing: FittedBox(
                             fit: BoxFit.scaleDown,
                             child: Text(
-                              '\$${transaction.amount.toStringAsFixed(2)}',
+                              '\$${transaction.amount.toStringAsFixed(2)}',  // Fixed: proper string interpolation
                               style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
