@@ -109,10 +109,10 @@ class SettingsScreen extends StatelessWidget {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFBBF24).withValues(alpha: 0.2),
+                          color: const Color(0xFF48EBFF).withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
-                            color: const Color(0xFFFBBF24).withValues(alpha: 0.4),
+                            color: const Color(0xFF1AE7FF).withValues(alpha: 0.4),
                           ),
                         ),
                         child: const Text(
@@ -120,7 +120,7 @@ class SettingsScreen extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFFFBBF24),
+                            color: Color(0xFF008697),
                             letterSpacing: 0.5,
                           ),
                         ),
