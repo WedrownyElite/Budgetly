@@ -1,5 +1,4 @@
-﻿// budgetly/lib/widgets/spending_chart_widget.dart - UPDATED VERSION
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/transaction.dart';
 
@@ -269,11 +268,13 @@ class SpendingChartWidget extends StatelessWidget {
         ],
 
         // Pie Chart for Spending Categories
-        const Text(
-          'Spending by Category',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        const Center(
+          child: Text(
+            'Spending by Category',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
 
         SizedBox(
           height: 250,
@@ -289,54 +290,127 @@ class SpendingChartWidget extends StatelessWidget {
           ),
         ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
 
         // Legend
-        Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          children: spendingByCategory.entries.map((entry) {
-            return _buildLegendItem(
-              entry.key.displayName,
-              _getCategoryColor(entry.key),
-              entry.value,
-            );
-          }).toList(),
+        Center (
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              children: spendingByCategory.entries.map((entry) {
+                return _buildLegendItem(
+                  entry.key.displayName,
+                  _getCategoryColor(entry.key),
+                  entry.value,
+                );
+              }).toList(),
+            ),
+          ),
         ),
 
         const SizedBox(height: 24),
 
         // Top Categories This Month
         if (categoryByMonth.containsKey(currentMonth)) ...[
-          const Text(
-            'Top Spending Categories This Month',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Top Spending Categories This Month',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
           ),
           const SizedBox(height: 12),
           ...(() {
             final categories = categoryByMonth[currentMonth]!.entries.toList()
               ..sort((a, b) => b.value.compareTo(a.value));
-            return categories.take(5).map((entry) => Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: entry.key.color.withValues(alpha:0.2),
-                  child: Icon(
-                    Icons.category,
-                    color: entry.key.color,
-                    size: 20,
+            return categories.take(5).map((entry) {
+              final categoryTransactions = transactions
+                  .where((t) =>
+              t.spendingCategory.group == entry.key &&
+                  t.date.startsWith(currentMonth) &&
+                  t.isExpense &&
+                  t.spendingCategory != SpendingCategory.transfer)
+                  .toList()
+                ..sort((a, b) => b.amount.compareTo(a.amount));
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8, left: 16, right: 16),
+                child: ExpansionTile(
+                  leading: CircleAvatar(
+                    backgroundColor: entry.key.color.withValues(alpha: 0.2),
+                    child: Icon(
+                      Icons.category,
+                      color: entry.key.color,
+                      size: 20,
+                    ),
                   ),
-                ),
-                title: Text(entry.key.displayName),
-                trailing: Text(
-                  '\$${entry.value.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                  title: Text(entry.key.displayName),
+                  trailing: Text(
+                    '\$${entry.value.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
+                  children: [
+                    const Divider(height: 1),
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: categoryTransactions.length,
+                      itemBuilder: (context, index) {
+                        final transaction = categoryTransactions[index];
+                        return ListTile(
+                          dense: true,
+                          title: Text(
+                            transaction.merchantName,
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                          subtitle: Text(
+                            transaction.date,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          trailing: Text(
+                            '\$${transaction.amount.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Total (${categoryTransactions.length} transactions)',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            '\$${entry.value.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ));
+              );
+            });
           })(),
         ],
       ],
