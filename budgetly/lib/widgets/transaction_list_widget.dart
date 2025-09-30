@@ -12,7 +12,32 @@ class TransactionListWidget extends StatelessWidget {
     required this.onRefresh,
   });
 
-  Color _getCategoryColor(CategoryGroup group) {
+  Color _getCategoryColor(CategoryGroup group, bool isDark) {
+    // Brighter colors for dark mode
+    if (isDark) {
+      switch (group) {
+        case CategoryGroup.transportation:
+          return const Color(0xFF60A5FA); // Lighter blue
+        case CategoryGroup.dining:
+          return const Color(0xFFF87171); // Lighter red
+        case CategoryGroup.groceries:
+          return const Color(0xFF34D399); // Lighter green
+        case CategoryGroup.bills:
+          return const Color(0xFFFBBF24); // Lighter orange
+        case CategoryGroup.shopping:
+          return const Color(0xFFF472B6); // Lighter pink
+        case CategoryGroup.entertainment:
+          return const Color(0xFFA78BFA); // Lighter purple
+        case CategoryGroup.healthcare:
+          return const Color(0xFF2DD4BF); // Lighter teal
+        case CategoryGroup.travel:
+          return const Color(0xFF818CF8); // Lighter indigo
+        case CategoryGroup.other:
+          return const Color(0xFF9CA3AF); // Lighter grey
+      }
+    }
+
+    // Standard colors for light mode
     switch (group) {
       case CategoryGroup.transportation:
         return const Color(0xFF3B82F6);
@@ -134,7 +159,7 @@ class TransactionListWidget extends StatelessWidget {
                     child: Icon(
                       Icons.refresh_rounded,
                       size: 20,
-                      color: isDark ? Colors.white70 : Colors.black87,
+                      color: isDark ? Colors.white : Colors.black87,
                     ),
                   ),
                 ),
@@ -179,7 +204,7 @@ class TransactionListWidget extends StatelessWidget {
                   'This may take a few seconds',
                   style: TextStyle(
                     fontSize: 14,
-                    color: isDark ? Colors.grey[500] : Colors.grey[600],
+                    color: isDark ? Colors.white70 : Colors.grey[600],
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -248,7 +273,7 @@ class TransactionListWidget extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white70 : Colors.black87,
+                          color: isDark ? Colors.white : Colors.black87,
                         ),
                       ),
                     ),
@@ -268,6 +293,7 @@ class TransactionListWidget extends StatelessWidget {
   Widget _buildTransactionCard(Transaction transaction, bool isDark) {
     final categoryColor = _getCategoryColor(
       transaction.spendingCategory.group,
+      isDark,
     );
     final categoryIcon = _getCategoryIcon(
       transaction.spendingCategory.group,
@@ -297,7 +323,7 @@ class TransactionListWidget extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: categoryColor.withValues(alpha: 0.15),
+                    color: categoryColor.withValues(alpha: isDark ? 0.25 : 0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
@@ -328,7 +354,7 @@ class TransactionListWidget extends StatelessWidget {
                         transaction.displayCategory,
                         style: TextStyle(
                           fontSize: 13,
-                          color: categoryColor.withValues(alpha: 0.8),
+                          color: categoryColor,
                           fontWeight: FontWeight.w500,
                         ),
                       ),

@@ -96,9 +96,36 @@ class SettingsScreen extends StatelessWidget {
                       fontSize: 16,
                     ),
                   ),
-                  subtitle: const Text(
-                    'Version 1.0.0',
-                    style: TextStyle(fontSize: 14),
+                  subtitle: Row(
+                    children: [
+                      const Text(
+                        'Version 0.1.0',
+                        style: TextStyle(fontSize: 14),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFBBF24).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: const Color(0xFFFBBF24).withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: const Text(
+                          'ALPHA',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFFBBF24),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const Divider(height: 1),
