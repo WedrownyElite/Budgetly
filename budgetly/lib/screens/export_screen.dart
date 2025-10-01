@@ -1,7 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import '../models/transaction.dart';
 import '../models/budget.dart';
-import '../models/financial_goal.dart';
 import '../models/recurring_transaction.dart';
 import '../services/export_service.dart';
 import '../services/budget_storage_service.dart';
@@ -24,18 +23,25 @@ class _ExportScreenState extends State<ExportScreen> {
   DateTime? _endDate;
   bool _isExporting = false;
 
-  Future<void> _exportTransactions() async {
+  Future<void> _exportTransactions(bool asPDF) async {
     setState(() => _isExporting = true);
 
     try {
-      final csv = await _exportService.exportTransactionsToCSV(
-        widget.transactions,
-        startDate: _startDate,
-        endDate: _endDate,
-      );
-
-      final filename = 'budgetly_transactions_${DateTime.now().millisecondsSinceEpoch}.csv';
-      await _exportService.shareCSV(csv, filename);
+      if (asPDF) {
+        await _exportService.exportTransactionsToPDF(
+          widget.transactions,
+          startDate: _startDate,
+          endDate: _endDate,
+        );
+      } else {
+        final csv = await _exportService.exportTransactionsToCSV(
+          widget.transactions,
+          startDate: _startDate,
+          endDate: _endDate,
+        );
+        final filename = 'budgetly_transactions_${DateTime.now().millisecondsSinceEpoch}.csv';
+        await _exportService.shareCSV(csv, filename);
+      }
 
       if (mounted) {
         AccessibilityService.announce(context, 'Transactions exported successfully');
@@ -85,7 +91,7 @@ class _ExportScreenState extends State<ExportScreen> {
         return BudgetStatus(budget: budget, spent: spent);
       }).toList();
 
-      final report = await _exportService.exportMonthlyReport(
+      await _exportService.exportMonthlyReportPDF(
         transactions: widget.transactions,
         budgetStatuses: budgetStatuses,
         goals: goals,
@@ -93,9 +99,6 @@ class _ExportScreenState extends State<ExportScreen> {
         year: now.year,
         month: now.month,
       );
-
-      final filename = 'budgetly_report_${now.year}_${now.month}.txt';
-      await _exportService.shareReport(report, filename);
 
       if (mounted) {
         AccessibilityService.announce(context, 'Monthly report exported successfully');
@@ -226,17 +229,35 @@ class _ExportScreenState extends State<ExportScreen> {
           const SizedBox(height: 16),
 
           ElevatedButton.icon(
-            onPressed: _isExporting ? null : _exportTransactions,
+            onPressed: _isExporting ? null : () => _exportTransactions(false),
             icon: _isExporting
                 ? const SizedBox(
               width: 16,
               height: 16,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-                : const Icon(Icons.file_download),
-            label: Text(_isExporting ? 'Exporting...' : 'Export Transactions CSV'),
+                : const Icon(Icons.description),
+            label: Text(_isExporting ? 'Exporting...' : 'Export as CSV'),
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          ElevatedButton.icon(
+            onPressed: _isExporting ? null : () => _exportTransactions(true),
+            icon: _isExporting
+                ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+                : const Icon(Icons.picture_as_pdf),
+            label: Text(_isExporting ? 'Exporting...' : 'Export as PDF'),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              backgroundColor: Colors.red.shade700,
             ),
           ),
 
@@ -275,7 +296,7 @@ class _ExportScreenState extends State<ExportScreen> {
               ),
               title: const Text('Current Month Report'),
               subtitle: Text(
-                _getMonthName(now.month) + ' ${now.year}',
+                '${_getMonthName(now.month)} ${now.year}',
                 style: const TextStyle(fontSize: 12),
               ),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),

@@ -54,24 +54,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Map<DateTime, double> _getMonthlyTotals() {
-    final Map<DateTime, double> totals = {};
-
-    for (var sub in _subscriptions) {
-      if (sub.nextBillingDate == null) continue;
-
-      final date = DateTime(
-        sub.nextBillingDate!.year,
-        sub.nextBillingDate!.month,
-        sub.nextBillingDate!.day,
-      );
-
-      totals[date] = (totals[date] ?? 0) + sub.recurringTransaction.averageAmount;
-    }
-
-    return totals;
-  }
-
   double _getMonthTotal(DateTime month) {
     double total = 0;
     for (var sub in _subscriptions) {
@@ -98,7 +80,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final selectedPayments = _getPaymentsForDay(_selectedDay);
     final selectedTotal = _getTotalForDay(_selectedDay);
     final monthTotal = _getMonthTotal(_focusedDay);
-    final dailyTotals = _getMonthlyTotals();
 
     return Scaffold(
       appBar: AppBar(

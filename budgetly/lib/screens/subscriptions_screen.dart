@@ -1,5 +1,4 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/transaction.dart';
 import '../models/recurring_transaction.dart';
@@ -30,7 +29,6 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
 
   Future<void> _loadData() async {
     _allRecurring = RecurringTransactionDetector.detectRecurring(widget.transactions);
-    final subscriptions = _allRecurring.where((r) => r.isSubscription).toList();
 
     _managedSubscriptions = await _subscriptionService.getSubscriptions(widget.transactions);
 
@@ -212,7 +210,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Text(
-                '\${amount.toStringAsFixed(2)}',
+                '\$${amount.toStringAsFixed(2)}',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -579,7 +577,7 @@ class _ManageSubscriptionDialogState extends State<_ManageSubscriptionDialog> {
 
             // Status
             DropdownButtonFormField<SubscriptionStatus>(
-              value: _status,
+              initialValue: _status,
               decoration: const InputDecoration(labelText: 'Status'),
               items: SubscriptionStatus.values.map((status) {
                 return DropdownMenuItem(

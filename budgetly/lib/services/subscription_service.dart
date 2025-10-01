@@ -46,7 +46,6 @@ class SubscriptionService {
     final prefs = await SharedPreferences.getInstance();
     final subscriptionsJson = prefs.getString(_subscriptionsKey);
 
-    List<ManagedSubscription> subscriptions = [];
     List<dynamic> decoded = [];
 
     if (subscriptionsJson != null) {
