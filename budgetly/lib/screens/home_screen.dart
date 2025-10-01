@@ -2,15 +2,24 @@
 import 'package:flutter/material.dart';
 import 'package:plaid_flutter/plaid_flutter.dart';
 import '../models/transaction.dart';
+import '../models/budget.dart';
 import '../services/plaid_service.dart';
 import '../services/storage_service.dart';
 import '../services/accessibility_service.dart';
+import '../services/notification_service.dart';
+import '../services/budget_storage_service.dart';
+import '../services/debug_data_service.dart';
+import '../services/subscription_service.dart';
 import '../widgets/transaction_list_widget.dart';
 import '../widgets/spending_chart_widget.dart';
 import 'budgets_screen.dart';
 import 'goals_screen.dart';
 import 'recurring_screen.dart';
 import 'settings_screen.dart';
+import 'subscriptions_screen.dart';
+import 'notifications_screen.dart';
+import 'calendar_screen.dart';
+import 'export_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,11 +34,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   List<Transaction> transactions = [];
   String? accessToken;
   int _selectedIndex = 0;
+  int _notificationCount = 0;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
   final PlaidService _plaidService = PlaidService();
   final StorageService _storageService = StorageService();
+  final NotificationService _notificationService = NotificationService();
+  final BudgetStorageService _budgetService = BudgetStorageService();
+  final SubscriptionService _subscriptionService = SubscriptionService();
 
   @override
   void initState() {
@@ -42,7 +55,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       parent: _animationController,
       curve: Curves.easeInOut,
     );
-    // Don't use context in initState - will check in build
     _checkConnectionStatus();
   }
 
@@ -66,7 +78,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
-  // Check motion preference and animate accordingly
   void _handleConnectionAnimation() {
     if (!mounted) return;
     if (MediaQuery.of(context).disableAnimations) {
@@ -125,21 +136,81 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
+  Future<void> _loadDebugData() async {
+    setState(() => isLoading = true);
+
+    try {
+      final debugTransactions = DebugDataService.getDebugTransactions();
+      setState(() {
+        transactions = debugTransactions;
+        isConnected = true;
+        isLoading = false;
+      });
+
+      _handleConnectionAnimation();
+      await _checkForNotifications();
+      _showSuccess('Debug data loaded successfully!');
+    } catch (e) {
+      _showError('Failed to load debug data: $e');
+      setState(() => isLoading = false);
+    }
+  }
+
   Future<void> _fetchTransactions() async {
     if (accessToken == null) return;
 
     try {
       final fetchedTransactions = await _plaidService.getTransactions(accessToken!);
       setState(() => transactions = fetchedTransactions);
+      await _checkForNotifications();
     } catch (e) {
       _showError('Failed to fetch transactions');
     }
   }
 
+  Future<void> _checkForNotifications() async {
+    // Calculate budget statuses
+    final budgets = await _budgetService.getBudgets();
+    final goals = await _budgetService.getGoals();
+    final subscriptions = await _subscriptionService.getSubscriptions(transactions);
+
+    final Map<CategoryGroup, double> spending = {};
+    final now = DateTime.now();
+    final firstDayOfMonth = DateTime(now.year, now.month, 1);
+
+    for (var transaction in transactions) {
+      if (transaction.spendingCategory == SpendingCategory.transfer) continue;
+      if (!transaction.isExpense) continue;
+
+      final transactionDate = DateTime.parse(transaction.date);
+      if (transactionDate.isBefore(firstDayOfMonth)) continue;
+
+      final group = transaction.spendingCategory.group;
+      spending[group] = (spending[group] ?? 0) + transaction.amount;
+    }
+
+    final budgetStatuses = budgets.map((budget) {
+      final spent = spending[budget.category] ?? 0;
+      return BudgetStatus(budget: budget, spent: spent);
+    }).toList();
+
+    // Check for new notifications
+    await _notificationService.checkForNotifications(
+      budgetStatuses: budgetStatuses,
+      subscriptions: subscriptions,
+      goals: goals,
+    );
+
+    // Update notification count
+    final notifications = await _notificationService.getNotifications();
+    setState(() {
+      _notificationCount = _notificationService.getUnreadCount(notifications);
+    });
+  }
+
   Future<void> _disconnect() async {
     await _storageService.deleteAccessToken();
     if (mounted) {
-      // Handle animation for disconnect
       if (MediaQuery.of(context).disableAnimations) {
         _animationController.value = 0.0;
       } else {
@@ -153,6 +224,50 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       });
       _showSuccess('Bank account disconnected');
     }
+  }
+
+  void _showDebugMenu() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Debug Options'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.bug_report),
+              title: const Text('Load Sample Data'),
+              subtitle: const Text('80 transactions with recurring patterns'),
+              onTap: () {
+                Navigator.pop(context);
+                _loadDebugData();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.clear_all),
+              title: const Text('Clear All Data'),
+              subtitle: const Text('Reset app to initial state'),
+              onTap: () async {
+                Navigator.pop(context);
+                await _storageService.deleteAccessToken();
+                setState(() {
+                  isConnected = false;
+                  accessToken = null;
+                  transactions.clear();
+                });
+                _showSuccess('All data cleared');
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showError(String message) {
@@ -199,7 +314,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Handle animation on first build if connected
     if (isConnected && _animationController.status == AnimationStatus.dismissed) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _handleConnectionAnimation();
@@ -235,82 +349,206 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               child: const Icon(Icons.account_balance_wallet, size: 20),
             ),
             const SizedBox(width: 12),
-            Flexible(
-              child: ExcludeSemantics(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Budgetly',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.5,
-                      color: isDark ? Colors.white : Colors.black87,
-                    ),
-                  ),
-                ),
+            const Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text('Budgetly'),
               ),
             ),
           ],
         ),
       ),
       actions: [
-        _buildAppBarButton(Icons.account_balance_wallet, 'Budgets', isDark, () {
+        _buildAppBarButton(Icons.notifications, 'Notifications', isDark, () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+          );
+          // Reload notification count
+          final notifications = await _notificationService.getNotifications();
+          setState(() {
+            _notificationCount = _notificationService.getUnreadCount(notifications);
+          });
+        }, badge: _notificationCount > 0 ? _notificationCount : null),
+        _buildAppBarButton(Icons.subscriptions, 'Subscriptions', isDark, () {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => BudgetsScreen(transactions: transactions),
+              builder: (context) => SubscriptionsScreen(transactions: transactions),
             ),
           );
         }),
-        _buildAppBarButton(Icons.flag_outlined, 'Goals', isDark, () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const GoalsScreen()),
-          );
-        }),
-        _buildAppBarButton(Icons.autorenew, 'Recurring', isDark, () {
+        _buildAppBarButton(Icons.calendar_month, 'Calendar', isDark, () {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => RecurringScreen(transactions: transactions),
+              builder: (context) => CalendarScreen(transactions: transactions),
             ),
           );
         }),
-        _buildAppBarButton(Icons.settings, 'Settings', isDark, () {
+        _buildAppBarButton(Icons.file_download, 'Export', isDark, () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const SettingsScreen()),
+            MaterialPageRoute(
+              builder: (context) => ExportScreen(transactions: transactions),
+            ),
           );
         }),
+        PopupMenuButton<String>(
+          icon: Icon(
+            Icons.more_vert,
+            color: isDark ? Colors.white : Colors.black87,
+          ),
+          itemBuilder: (context) => <PopupMenuEntry<String>>[
+            const PopupMenuItem<String>(
+              value: 'budgets',
+              child: Row(
+                children: [
+                  Icon(Icons.account_balance_wallet, size: 20),
+                  SizedBox(width: 12),
+                  Text('Budgets'),
+                ],
+              ),
+            ),
+            const PopupMenuItem<String>(
+              value: 'goals',
+              child: Row(
+                children: [
+                  Icon(Icons.flag_outlined, size: 20),
+                  SizedBox(width: 12),
+                  Text('Goals'),
+                ],
+              ),
+            ),
+            const PopupMenuItem<String>(
+              value: 'recurring',
+              child: Row(
+                children: [
+                  Icon(Icons.autorenew, size: 20),
+                  SizedBox(width: 12),
+                  Text('Recurring'),
+                ],
+              ),
+            ),
+            const PopupMenuItem<String>(
+              value: 'settings',
+              child: Row(
+                children: [
+                  Icon(Icons.settings, size: 20),
+                  SizedBox(width: 12),
+                  Text('Settings'),
+                ],
+              ),
+            ),
+            const PopupMenuDivider(),
+            const PopupMenuItem<String>(
+              value: 'debug',
+              child: Row(
+                children: [
+                  Icon(Icons.bug_report, size: 20),
+                  SizedBox(width: 12),
+                  Text('Debug'),
+                ],
+              ),
+            ),
+          ],
+          onSelected: (value) {
+            switch (value) {
+              case 'budgets':
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => BudgetsScreen(transactions: transactions),
+                  ),
+                );
+                break;
+              case 'goals':
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const GoalsScreen()),
+                );
+                break;
+              case 'recurring':
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => RecurringScreen(transactions: transactions),
+                  ),
+                );
+                break;
+              case 'settings':
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                );
+                break;
+              case 'debug':
+                _showDebugMenu();
+                break;
+            }
+          },
+        ),
         const SizedBox(width: 8),
       ],
     );
   }
 
-  Widget _buildAppBarButton(IconData icon, String tooltip, bool isDark, VoidCallback onPressed) {
+  Widget _buildAppBarButton(
+      IconData icon,
+      String tooltip,
+      bool isDark,
+      VoidCallback onPressed, {
+        int? badge,
+      }) {
     return Semantics(
       button: true,
-      label: tooltip,
+      label: badge != null ? '$tooltip, $badge unread' : tooltip,
       child: Padding(
         padding: const EdgeInsets.only(right: 8),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onPressed,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF262D3D) : Colors.grey.shade200,
+        child: Stack(
+          children: [
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onPressed,
                 borderRadius: BorderRadius.circular(12),
-              ),
-              child: ExcludeSemantics(
-                child: Icon(icon, size: 20, color: isDark ? Colors.white : Colors.black87),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF262D3D) : Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, size: 20, color: isDark ? Colors.white : Colors.black87),
+                ),
               ),
             ),
-          ),
+            if (badge != null)
+              Positioned(
+                right: 0,
+                top: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 16,
+                    minHeight: 16,
+                  ),
+                  child: Text(
+                    badge > 99 ? '99+' : '$badge',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -371,33 +609,31 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             color: isSelected ? null : Colors.transparent,
             borderRadius: BorderRadius.circular(16),
           ),
-          child: ExcludeSemantics(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  icon,
-                  color: isSelected
-                      ? Colors.white
-                      : (isDark ? Colors.grey : Colors.grey.shade600),
-                  size: 22,
-                ),
-                if (isSelected) ...[
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      label,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                color: isSelected
+                    ? Colors.white
+                    : (isDark ? Colors.grey : Colors.grey.shade600),
+                size: 22,
+              ),
+              if (isSelected) ...[
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ],
+                ),
               ],
-            ),
+            ],
           ),
         ),
       ),
@@ -421,54 +657,44 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Semantics(
-                image: true,
-                label: 'Wallet icon',
+              Container(
+                padding: const EdgeInsets.all(40),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFF6366F1).withValues(alpha: 0.2),
+                      const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                    ],
+                  ),
+                ),
                 child: Container(
-                  padding: const EdgeInsets.all(40),
-                  decoration: BoxDecoration(
+                  padding: const EdgeInsets.all(30),
+                  decoration: const BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: LinearGradient(
-                      colors: [
-                        const Color(0xFF6366F1).withValues(alpha: 0.2),
-                        const Color(0xFF8B5CF6).withValues(alpha: 0.2),
-                      ],
+                      colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
                     ),
                   ),
-                  child: Container(
-                    padding: const EdgeInsets.all(30),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                      ),
-                    ),
-                    child: ExcludeSemantics(
-                      child: const Icon(
-                        Icons.account_balance_wallet,
-                        size: 64,
-                        color: Colors.white,
-                      ),
-                    ),
+                  child: const Icon(
+                    Icons.account_balance_wallet,
+                    size: 64,
+                    color: Colors.white,
                   ),
                 ),
               ),
               const SizedBox(height: 40),
-              Semantics(
-                header: true,
-                child: Text(
-                  'Welcome to Budgetly',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.black87,
-                    letterSpacing: -1,
-                  ),
+              const Text(
+                'Welcome to Budgetly',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -1,
                 ),
               ),
               const SizedBox(height: 12),
               Text(
-                'Connect your bank account to start\ntracking your finances',
+                'Track subscriptions, manage budgets,\nand achieve your financial goals',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16,
@@ -477,93 +703,81 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
               ),
               const SizedBox(height: 48),
-              Semantics(
-                button: true,
-                label: isLoading
-                    ? 'Connecting to bank account'
-                    : 'Connect bank account securely with Plaid',
-                child: Container(
-                  width: double.infinity,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF6366F1).withValues(alpha: 0.4),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
+              Container(
+                width: double.infinity,
+                height: 56,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
                   ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: isLoading ? null : _connectToPlaid,
-                      borderRadius: BorderRadius.circular(16),
-                      child: Center(
-                        child: isLoading
-                            ? Semantics(
-                          label: 'Loading',
-                          child: const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF6366F1).withValues(alpha: 0.4),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: isLoading ? null : _connectToPlaid,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Center(
+                      child: isLoading
+                          ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.white,
+                        ),
+                      )
+                          : const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.link, color: Colors.white),
+                          SizedBox(width: 12),
+                          Text(
+                            'Connect Bank Account',
+                            style: TextStyle(
                               color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
                             ),
                           ),
-                        )
-                            : ExcludeSemantics(
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.link, color: Colors.white),
-                              SizedBox(width: 12),
-                              Text(
-                                'Connect Bank Account',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                        ],
                       ),
                     ),
                   ),
                 ),
               ),
+              const SizedBox(height: 16),
+              TextButton.icon(
+                onPressed: _loadDebugData,
+                icon: const Icon(Icons.bug_report),
+                label: const Text('Load Sample Data (Debug)'),
+              ),
               const SizedBox(height: 24),
-              Semantics(
-                label: 'This connection is secured by Plaid',
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ExcludeSemantics(
-                      child: Icon(
-                        Icons.lock_outline,
-                        size: 16,
-                        color: isDark ? Colors.grey[600] : Colors.grey[500],
-                      ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.lock_outline,
+                    size: 16,
+                    color: isDark ? Colors.grey[600] : Colors.grey[500],
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Secured by Plaid',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.grey[600] : Colors.grey[500],
                     ),
-                    const SizedBox(width: 8),
-                    ExcludeSemantics(
-                      child: Text(
-                        'Secured by Plaid',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? Colors.grey[600] : Colors.grey[500],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -589,103 +803,90 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ),
         child: Column(
           children: [
-            // Connected Status Card
-            Semantics(
-              label: 'Bank account connected and synced',
-              child: Container(
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1A1F29) : Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isDark
-                        ? const Color(0xFF6366F1).withValues(alpha: 0.3)
-                        : Colors.grey.shade300,
-                    width: 1,
-                  ),
-                ),
-                child: ExcludeSemantics(
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF48BB78), Color(0xFF38A169)],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.check, color: Colors.white, size: 20),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Connected',
-                              style: TextStyle(
-                                color: isDark ? Colors.white : Colors.black87,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text(
-                              'Your account is synced',
-                              style: TextStyle(
-                                color: isDark ? Colors.grey : Colors.grey.shade600,
-                                fontSize: 12,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Semantics(
-                        button: true,
-                        label: 'Disconnect bank account',
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: _disconnect,
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFE53E3E).withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: const Color(0xFFE53E3E).withValues(alpha: 0.3),
-                                ),
-                              ),
-                              child: ExcludeSemantics(
-                                child: Text(
-                                  'Disconnect',
-                                  style: const TextStyle(
-                                    color: Color(0xFFE53E3E),
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+            Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1A1F29) : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isDark
+                      ? const Color(0xFF6366F1).withValues(alpha: 0.3)
+                      : Colors.grey.shade300,
+                  width: 1,
                 ),
               ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF48BB78), Color(0xFF38A169)],
+                      ),
+                    ),
+                    child: const Icon(Icons.check, color: Colors.white, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Connected',
+                          style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black87,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          'Your account is synced',
+                          style: TextStyle(
+                            color: isDark ? Colors.grey : Colors.grey.shade600,
+                            fontSize: 12,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: _disconnect,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE53E3E).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: const Color(0xFFE53E3E).withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: const Text(
+                          'Disconnect',
+                          style: TextStyle(
+                            color: Color(0xFFE53E3E),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            // Main Content Area
             Expanded(
               child: _selectedIndex == 0
                   ? TransactionListWidget(
