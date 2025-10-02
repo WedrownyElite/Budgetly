@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../models/subscription.dart';
 import '../models/transaction.dart';
+import '../models/recurring_transaction.dart';
 import '../services/subscription_service.dart';
 
 class CalendarScreen extends StatefulWidget {
@@ -28,16 +29,99 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Future<void> _loadSubscriptions() async {
-    final subs = await _subscriptionService.getSubscriptions(widget.transactions);
+    // Get managed subscriptions
+    final managedSubs = await _subscriptionService.getSubscriptions(widget.transactions);
+
+    // Detect recurring transactions
+    final recurring = RecurringTransactionDetector.detectRecurring(widget.transactions);
+    final subscriptionRecurring = recurring.where((r) => r.isSubscription).toList();
+
+    // Create calendar items from both sources
+    final List<ManagedSubscription> calendarItems = [];
+
+    // Add managed subscriptions
+    calendarItems.addAll(managedSubs.where((s) =>
+    s.status == SubscriptionStatus.active &&
+        s.nextBillingDate != null
+    ));
+
+    // Add unmanaged recurring subscriptions with estimated dates
+    for (var recurringTxn in subscriptionRecurring) {
+      // Check if already managed
+      final isManaged = managedSubs.any((s) =>
+      s.merchantName.toLowerCase() == recurringTxn.merchantName.toLowerCase()
+      );
+
+      if (!isManaged) {
+        // Create a temporary managed subscription with estimated next billing
+        final nextBilling = _estimateNextBilling(recurringTxn);
+
+        calendarItems.add(ManagedSubscription(
+          id: 'temp_${recurringTxn.merchantName}',
+          merchantName: recurringTxn.merchantName,
+          recurringTransaction: recurringTxn,
+          status: SubscriptionStatus.active,
+          nextBillingDate: nextBilling,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ));
+      }
+    }
+
     if (mounted) {
       setState(() {
-        _subscriptions = subs.where((s) =>
-        s.status == SubscriptionStatus.active &&
-            s.nextBillingDate != null
-        ).toList();
+        _subscriptions = calendarItems;
         _isLoading = false;
       });
     }
+  }
+
+  DateTime _estimateNextBilling(RecurringTransaction recurring) {
+    final lastDate = recurring.lastOccurrence;
+    final now = DateTime.now();
+
+    // Calculate next billing based on frequency
+    DateTime estimated;
+    switch (recurring.frequency) {
+      case RecurrenceFrequency.weekly:
+        estimated = lastDate.add(const Duration(days: 7));
+        break;
+      case RecurrenceFrequency.biWeekly:
+        estimated = lastDate.add(const Duration(days: 14));
+        break;
+      case RecurrenceFrequency.monthly:
+        estimated = DateTime(lastDate.year, lastDate.month + 1, lastDate.day);
+        break;
+      case RecurrenceFrequency.quarterly:
+        estimated = DateTime(lastDate.year, lastDate.month + 3, lastDate.day);
+        break;
+      case RecurrenceFrequency.yearly:
+        estimated = DateTime(lastDate.year + 1, lastDate.month, lastDate.day);
+        break;
+    }
+
+    // If estimated date is in the past, keep adding intervals until future
+    while (estimated.isBefore(now)) {
+      switch (recurring.frequency) {
+        case RecurrenceFrequency.weekly:
+          estimated = estimated.add(const Duration(days: 7));
+          break;
+        case RecurrenceFrequency.biWeekly:
+          estimated = estimated.add(const Duration(days: 14));
+          break;
+        case RecurrenceFrequency.monthly:
+          estimated = DateTime(estimated.year, estimated.month + 1, estimated.day);
+          break;
+        case RecurrenceFrequency.quarterly:
+          estimated = DateTime(estimated.year, estimated.month + 3, estimated.day);
+          break;
+        case RecurrenceFrequency.yearly:
+          estimated = DateTime(estimated.year + 1, estimated.month, estimated.day);
+          break;
+      }
+    }
+
+    return estimated;
   }
 
   List<ManagedSubscription> _getPaymentsForDay(DateTime day) {
@@ -56,14 +140,51 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   double _getMonthTotal(DateTime month) {
     double total = 0;
-    for (var sub in _subscriptions) {
-      if (sub.nextBillingDate == null) continue;
-      if (sub.nextBillingDate!.year == month.year &&
-          sub.nextBillingDate!.month == month.month) {
-        total += sub.recurringTransaction.averageAmount;
+    final Set<String> counted = {}; // Track which subscriptions we've counted
+
+    // Get all days in the month
+    final firstDay = DateTime(month.year, month.month, 1);
+    final lastDay = DateTime(month.year, month.month + 1, 0);
+
+    // Check each day in the month
+    for (var day = firstDay; day.isBefore(lastDay.add(const Duration(days: 1))); day = day.add(const Duration(days: 1))) {
+      for (var sub in _subscriptions) {
+        if (sub.nextBillingDate == null) continue;
+
+        // Check if this subscription bills on this day
+        if (isSameDay(sub.nextBillingDate!, day)) {
+          // Only count each subscription once per month
+          if (!counted.contains(sub.merchantName)) {
+            total += sub.recurringTransaction.averageAmount;
+            counted.add(sub.merchantName);
+          }
+        }
       }
     }
+
     return total;
+  }
+
+  int _getPaymentCountForMonth(DateTime month) {
+    final Set<String> counted = {}; // Track unique subscriptions
+
+    // Get all days in the month
+    final firstDay = DateTime(month.year, month.month, 1);
+    final lastDay = DateTime(month.year, month.month + 1, 0);
+
+    // Check each day in the month
+    for (var day = firstDay; day.isBefore(lastDay.add(const Duration(days: 1))); day = day.add(const Duration(days: 1))) {
+      for (var sub in _subscriptions) {
+        if (sub.nextBillingDate == null) continue;
+
+        // Check if this subscription bills on this day
+        if (isSameDay(sub.nextBillingDate!, day)) {
+          counted.add(sub.merchantName);
+        }
+      }
+    }
+
+    return counted.length;
   }
 
   @override
@@ -139,7 +260,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${_subscriptions.length}',
+                      '${_getPaymentCountForMonth(_focusedDay)}',
                       style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -197,20 +318,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   final total = _getTotalForDay(date);
 
                   return Positioned(
-                    bottom: 1,
+                    bottom: 2,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
                       decoration: BoxDecoration(
                         color: Colors.orange,
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(3),
                       ),
                       child: Text(
                         '\$${total.toStringAsFixed(0)}',
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 9,
+                          fontSize: 8,
                           fontWeight: FontWeight.bold,
                         ),
+                        overflow: TextOverflow.clip,
                       ),
                     ),
                   );
@@ -223,7 +345,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 });
               },
               onPageChanged: (focusedDay) {
-                _focusedDay = focusedDay;
+                setState(() {
+                  _focusedDay = focusedDay;
+                });
               },
             ),
           ),

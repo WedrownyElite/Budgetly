@@ -12,7 +12,6 @@ import '../services/debug_data_service.dart';
 import '../services/subscription_service.dart';
 import '../services/transaction_storage_service.dart';
 import '../widgets/transaction_list_widget.dart';
-import '../widgets/spending_chart_widget.dart';
 import '../widgets/transaction_filters_widget.dart';
 import 'budgets_screen.dart';
 import 'goals_screen.dart';
@@ -22,6 +21,7 @@ import 'notifications_screen.dart';
 import 'calendar_screen.dart';
 import 'export_screen.dart';
 import 'transaction_detail_screen.dart';
+import 'analytics_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -415,9 +415,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ],
         );
       case 1: // Analytics
-        return SingleChildScrollView(
-          child: SpendingChartWidget(transactions: transactions),
-        );
+        return AnalyticsScreen(transactions: transactions);
       case 2: // Budgets & Goals
         return BudgetsScreen(transactions: transactions);
       case 3: // Recurring
