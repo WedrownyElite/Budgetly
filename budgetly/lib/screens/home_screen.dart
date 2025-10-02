@@ -22,6 +22,7 @@ import 'calendar_screen.dart';
 import 'export_screen.dart';
 import 'transaction_detail_screen.dart';
 import 'analytics_screen.dart';
+import 'backup_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});

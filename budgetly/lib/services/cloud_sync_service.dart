@@ -1,34 +1,34 @@
 ﻿// budgetly/lib/services/cloud_sync_service.dart
 import 'dart:convert';
-import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:uuid/uuid.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
-import '../models/transaction.dart';
+import 'package:flutter/foundation.dart';
+import '../models/transaction.dart' as models;
 import '../models/budget.dart';
 import '../models/financial_goal.dart';
 import 'transaction_storage_service.dart';
 import 'budget_storage_service.dart';
+import 'secure_key_manager.dart';
 
 class CloudSyncService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final TransactionStorageService _transactionStorage = TransactionStorageService();
   final BudgetStorageService _budgetStorage = BudgetStorageService();
+  final SecureKeyManager _keyManager = SecureKeyManager();
 
   String? _userId;
   String? _deviceId;
-
-  // Encryption key - in production, derive from user password or store securely
-  static const String _encryptionKey = 'your-32-character-secret-key!!'; // Change this!
+  String? _encryptionKey;
 
   /// Initialize cloud sync with user ID
   Future<void> initialize(String userId) async {
     _userId = userId;
-    _deviceId = await _getOrCreateDeviceId();
+    _deviceId = await _keyManager.getDeviceId();
+    _encryptionKey = await _keyManager.getEncryptionKey();
   }
 
   /// Check if user is authenticated
@@ -37,7 +37,7 @@ class CloudSyncService {
   /// Check network connectivity
   Future<bool> isOnline() async {
     final connectivityResult = await Connectivity().checkConnectivity();
-    return connectivityResult != ConnectivityResult.none;
+    return !connectivityResult.contains(ConnectivityResult.none);
   }
 
   // ============================================================================
@@ -137,7 +137,9 @@ class CloudSyncService {
         );
       }).toList();
     } catch (e) {
-      print('Error listing backups: $e');
+      if (kDebugMode) {
+        debugPrint('Error listing backups: $e');
+      }
       return [];
     }
   }
@@ -180,7 +182,7 @@ class CloudSyncService {
 
       // Restore transactions
       final transactions = (data['transactions'] as List)
-          .map((json) => Transaction.fromJson(json))
+          .map((json) => models.Transaction.fromJson(json))
           .toList();
       await _transactionStorage.saveTransactions(transactions);
 
@@ -234,7 +236,9 @@ class CloudSyncService {
 
       return true;
     } catch (e) {
-      print('Error deleting backup: $e');
+      if (kDebugMode) {
+        debugPrint('Error deleting backup: $e');
+      }
       return false;
     }
   }
@@ -274,7 +278,7 @@ class CloudSyncService {
   }
 
   /// Sync transactions to cloud
-  Future<bool> syncTransactions(List<Transaction> transactions) async {
+  Future<bool> syncTransactions(List<models.Transaction> transactions) async {
     if (!isAuthenticated || !await isOnline()) return false;
 
     try {
@@ -297,13 +301,15 @@ class CloudSyncService {
       await batch.commit();
       return true;
     } catch (e) {
-      print('Sync failed: $e');
+      if (kDebugMode) {
+        debugPrint('Sync failed: $e');
+      }
       return false;
     }
   }
 
   /// Pull transactions from cloud
-  Future<List<Transaction>> pullTransactions({DateTime? since}) async {
+  Future<List<models.Transaction>> pullTransactions({DateTime? since}) async {
     if (!isAuthenticated) return [];
 
     try {
@@ -319,10 +325,12 @@ class CloudSyncService {
       final snapshot = await query.get();
 
       return snapshot.docs.map((doc) {
-        return Transaction.fromJson(doc.data());
+        return models.Transaction.fromJson(doc.data() as Map<String, dynamic>);
       }).toList();
     } catch (e) {
-      print('Pull failed: $e');
+      if (kDebugMode) {
+        debugPrint('Pull failed: $e');
+      }
       return [];
     }
   }
@@ -331,13 +339,11 @@ class CloudSyncService {
   // UTILITY METHODS
   // ============================================================================
 
-  Future<String> _getOrCreateDeviceId() async {
-    // In production, use device_info_plus or similar
-    return const Uuid().v4();
-  }
-
   String _encryptData(String plainText) {
-    final key = encrypt.Key.fromUtf8(_encryptionKey);
+    if (_encryptionKey == null) {
+      throw Exception('Encryption key not initialized. Call initialize() first.');
+    }
+    final key = encrypt.Key.fromUtf8(_encryptionKey!);
     final iv = encrypt.IV.fromLength(16);
     final encrypter = encrypt.Encrypter(encrypt.AES(key));
     final encrypted = encrypter.encrypt(plainText, iv: iv);
@@ -345,10 +351,13 @@ class CloudSyncService {
   }
 
   String _decryptData(String encryptedText) {
+    if (_encryptionKey == null) {
+      throw Exception('Encryption key not initialized. Call initialize() first.');
+    }
     final parts = encryptedText.split(':');
     final iv = encrypt.IV.fromBase64(parts[0]);
     final encrypted = encrypt.Encrypted.fromBase64(parts[1]);
-    final key = encrypt.Key.fromUtf8(_encryptionKey);
+    final key = encrypt.Key.fromUtf8(_encryptionKey!);
     final encrypter = encrypt.Encrypter(encrypt.AES(key));
     return encrypter.decrypt(encrypted, iv: iv);
   }
