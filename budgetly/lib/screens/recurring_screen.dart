@@ -74,12 +74,6 @@ class _RecurringScreenState extends State<RecurringScreen> with SingleTickerProv
     }
   }
 
-  double _getTotalMonthlyCost(SubscriptionStatus? filterStatus) {
-    return _managedSubscriptions
-        .where((s) => filterStatus == null || s.status == filterStatus)
-        .fold(0.0, (sum, s) => sum + s.recurringTransaction.monthlyCost);
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -153,16 +147,20 @@ class _RecurringScreenState extends State<RecurringScreen> with SingleTickerProv
       );
     }
 
+    // Calculate totals from all subscription recurring transactions
+    final totalMonthly = subscriptions.fold(0.0, (sum, r) => sum + r.monthlyCost);
+    final totalAnnual = subscriptions.fold(0.0, (sum, r) => sum + r.annualCost);
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Summary Cards
+        // Summary Cards - NOW WITH CORRECT CALCULATIONS
         Row(
           children: [
             Expanded(
               child: _buildSummaryCard(
                 'Monthly Cost',
-                _getTotalMonthlyCost(SubscriptionStatus.active),
+                totalMonthly,  // Using calculated total
                 Colors.blue,
                 Icons.calendar_month,
                 isDark,
@@ -172,7 +170,7 @@ class _RecurringScreenState extends State<RecurringScreen> with SingleTickerProv
             Expanded(
               child: _buildSummaryCard(
                 'Annual Cost',
-                _getTotalMonthlyCost(SubscriptionStatus.active) * 12,
+                totalAnnual,  // Using calculated total
                 Colors.purple,
                 Icons.calendar_today,
                 isDark,
@@ -182,6 +180,7 @@ class _RecurringScreenState extends State<RecurringScreen> with SingleTickerProv
         ),
         const SizedBox(height: 12),
 
+        // Rest of the method remains the same...
         // Alerts
         if (unusedSubscriptions.isNotEmpty) ...[
           _buildAlertCard(

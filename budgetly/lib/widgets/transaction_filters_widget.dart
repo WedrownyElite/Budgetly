@@ -22,6 +22,8 @@ class _TransactionFiltersWidgetState extends State<TransactionFiltersWidget> {
   SpendingCategory? _selectedCategory;
   bool _showExpenses = true;
   bool _showIncome = true;
+  DateTime? _startDate;
+  DateTime? _endDate;
 
   List<String> get _accounts {
     final accounts = widget.allTransactions
@@ -77,81 +79,178 @@ class _TransactionFiltersWidgetState extends State<TransactionFiltersWidget> {
           ),
           const SizedBox(height: 12),
 
-          // Filter Chips Row
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                // Account Filter
-                if (_accounts.length > 1)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: FilterChip(
-                      label: Text(_selectedAccount ?? 'All Accounts'),
-                      selected: _selectedAccount != null,
-                      onSelected: (selected) {
-                        _showAccountPicker();
-                      },
-                      avatar: const Icon(Icons.account_balance, size: 16),
-                    ),
-                  ),
-
-                // Category Filter
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Text(_selectedCategory?.displayName ?? 'All Categories'),
-                    selected: _selectedCategory != null,
-                    onSelected: (selected) {
-                      _showCategoryPicker();
-                    },
-                    avatar: const Icon(Icons.category, size: 16),
-                  ),
-                ),
-
-                // Expense/Income Toggle
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: const Text('Expenses'),
-                    selected: _showExpenses,
-                    onSelected: (selected) {
-                      setState(() => _showExpenses = selected);
+          // Date Range Filter
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _startDate ?? DateTime.now().subtract(const Duration(days: 30)),
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now(),
+                    );
+                    if (picked != null) {
+                      setState(() => _startDate = picked);
                       _applyFilters();
-                    },
-                    avatar: Icon(
-                      Icons.arrow_upward,
-                      size: 16,
-                      color: _showExpenses ? Colors.red : null,
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: isDark ? const Color(0xFF6366F1) : Colors.grey.shade400,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Start Date',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: isDark ? Colors.grey[400] : Colors.grey[600],
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _startDate != null
+                                  ? '${_startDate!.month}/${_startDate!.day}/${_startDate!.year}'
+                                  : 'Any',
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ],
+                        ),
+                        const Icon(Icons.calendar_today, size: 16),
+                      ],
                     ),
                   ),
                 ),
-                FilterChip(
-                  label: const Text('Income'),
-                  selected: _showIncome,
-                  onSelected: (selected) {
-                    setState(() => _showIncome = selected);
-                    _applyFilters();
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _endDate ?? DateTime.now(),
+                      firstDate: _startDate ?? DateTime(2020),
+                      lastDate: DateTime.now(),
+                    );
+                    if (picked != null) {
+                      setState(() => _endDate = picked);
+                      _applyFilters();
+                    }
                   },
-                  avatar: Icon(
-                    Icons.arrow_downward,
-                    size: 16,
-                    color: _showIncome ? Colors.green : null,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: isDark ? const Color(0xFF6366F1) : Colors.grey.shade400,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'End Date',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: isDark ? Colors.grey[400] : Colors.grey[600],
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _endDate != null
+                                  ? '${_endDate!.month}/${_endDate!.day}/${_endDate!.year}'
+                                  : 'Any',
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ],
+                        ),
+                        const Icon(Icons.calendar_today, size: 16),
+                      ],
+                    ),
                   ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Filter Chips - Now wrapped to prevent scrolling
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              // Account Filter
+              if (_accounts.length > 1)
+                FilterChip(
+                  label: Text(_selectedAccount ?? 'All Accounts'),
+                  selected: _selectedAccount != null,
+                  onSelected: (selected) {
+                    _showAccountPicker();
+                  },
+                  avatar: const Icon(Icons.account_balance, size: 16),
                 ),
 
-                // Clear All Filters
-                if (_hasActiveFilters())
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: TextButton.icon(
-                      onPressed: _clearAllFilters,
-                      icon: const Icon(Icons.clear_all, size: 16),
-                      label: const Text('Clear'),
-                    ),
-                  ),
-              ],
-            ),
+              // Category Filter
+              FilterChip(
+                label: Text(_selectedCategory?.displayName ?? 'All Categories'),
+                selected: _selectedCategory != null,
+                onSelected: (selected) {
+                  _showCategoryPicker();
+                },
+                avatar: const Icon(Icons.category, size: 16),
+              ),
+
+              // Expense Toggle
+              FilterChip(
+                label: const Text('Expenses'),
+                selected: _showExpenses,
+                onSelected: (selected) {
+                  setState(() => _showExpenses = selected);
+                  _applyFilters();
+                },
+                avatar: Icon(
+                  Icons.arrow_upward,
+                  size: 16,
+                  color: _showExpenses ? Colors.red : null,
+                ),
+              ),
+
+              // Income Toggle
+              FilterChip(
+                label: const Text('Income'),
+                selected: _showIncome,
+                onSelected: (selected) {
+                  setState(() => _showIncome = selected);
+                  _applyFilters();
+                },
+                avatar: Icon(
+                  Icons.arrow_downward,
+                  size: 16,
+                  color: _showIncome ? Colors.green : null,
+                ),
+              ),
+
+              // Clear All Filters
+              if (_hasActiveFilters())
+                ActionChip(
+                  label: const Text('Clear All'),
+                  onPressed: _clearAllFilters,
+                  avatar: const Icon(Icons.clear_all, size: 16),
+                ),
+            ],
           ),
         ],
       ),
@@ -163,7 +262,9 @@ class _TransactionFiltersWidgetState extends State<TransactionFiltersWidget> {
         _selectedAccount != null ||
         _selectedCategory != null ||
         !_showExpenses ||
-        !_showIncome;
+        !_showIncome ||
+        _startDate != null ||
+        _endDate != null;
   }
 
   void _showAccountPicker() {
@@ -255,6 +356,8 @@ class _TransactionFiltersWidgetState extends State<TransactionFiltersWidget> {
       _selectedCategory = null;
       _showExpenses = true;
       _showIncome = true;
+      _startDate = null;
+      _endDate = null;
     });
     _applyFilters();
   }
@@ -270,6 +373,16 @@ class _TransactionFiltersWidgetState extends State<TransactionFiltersWidget> {
           t.displayCategory.toLowerCase().contains(query) ||
           t.accountName.toLowerCase().contains(query)
       ).toList();
+    }
+
+    // Date range filter
+    if (_startDate != null || _endDate != null) {
+      filtered = filtered.where((t) {
+        final date = DateTime.parse(t.date);
+        if (_startDate != null && date.isBefore(_startDate!)) return false;
+        if (_endDate != null && date.isAfter(_endDate!.add(const Duration(days: 1)))) return false;
+        return true;
+      }).toList();
     }
 
     // Account filter
