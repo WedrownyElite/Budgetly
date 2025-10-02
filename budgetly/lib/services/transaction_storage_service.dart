@@ -1,4 +1,5 @@
 ﻿import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/transaction.dart';
 
@@ -27,7 +28,7 @@ class TransactionStorageService {
       final List<dynamic> jsonList = jsonDecode(jsonString);
       return jsonList.map((json) => Transaction.fromJson(json)).toList();
     } catch (e) {
-      print('Error loading transactions: $e');
+      debugPrint('Error loading transactions: $e');
       return [];
     }
   }

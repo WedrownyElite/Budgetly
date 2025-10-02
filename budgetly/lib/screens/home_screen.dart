@@ -573,7 +573,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   );
                 },
               ),
-              const Divider(height: 1),
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(10),
@@ -595,7 +594,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   );
                 },
               ),
-              const Divider(height: 1),
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(10),
@@ -617,7 +615,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   );
                 },
               ),
-              const Divider(height: 1),
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(10),
@@ -673,7 +670,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   );
                 },
               ),
-              const Divider(height: 1),
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(10),
