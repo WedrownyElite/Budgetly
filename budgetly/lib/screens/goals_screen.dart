@@ -402,7 +402,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                     children: [
                       Flexible(
                         child: Text(
-                          '\${goal.currentAmount.toStringAsFixed(2)} / \${goal.targetAmount.toStringAsFixed(2)}',
+                          '${goal.currentAmount.toStringAsFixed(2)} / ${goal.targetAmount.toStringAsFixed(2)}',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
@@ -455,7 +455,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                         const SizedBox(width: 8),
                         Flexible(
                           child: Text(
-                            '\${goal.remainingAmount.toStringAsFixed(2)} to go',
+                            '${goal.remainingAmount.toStringAsFixed(2)} to go',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey[600],

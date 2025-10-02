@@ -16,7 +16,6 @@ import 'budgets_screen.dart';
 import 'goals_screen.dart';
 import 'recurring_screen.dart';
 import 'settings_screen.dart';
-import 'subscriptions_screen.dart';
 import 'notifications_screen.dart';
 import 'calendar_screen.dart';
 import 'export_screen.dart';
@@ -169,7 +168,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _checkForNotifications() async {
-    // Calculate budget statuses
     final budgets = await _budgetService.getBudgets();
     final goals = await _budgetService.getGoals();
     final subscriptions = await _subscriptionService.getSubscriptions(transactions);
@@ -194,14 +192,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       return BudgetStatus(budget: budget, spent: spent);
     }).toList();
 
-    // Check for new notifications
     await _notificationService.checkForNotifications(
       budgetStatuses: budgetStatuses,
       subscriptions: subscriptions,
       goals: goals,
     );
 
-    // Update notification count
     final notifications = await _notificationService.getNotifications();
     setState(() {
       _notificationCount = _notificationService.getUnreadCount(notifications);
@@ -310,6 +306,273 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
+  Widget _getCurrentScreen() {
+    switch (_selectedIndex) {
+      case 0: // Home/Transactions
+        return Column(
+          children: [
+            _buildConnectionCard(),
+            Expanded(
+              child: TransactionListWidget(
+                transactions: transactions,
+                onRefresh: _fetchTransactions,
+              ),
+            ),
+          ],
+        );
+      case 1: // Analytics
+        return SingleChildScrollView(
+          child: SpendingChartWidget(transactions: transactions),
+        );
+      case 2: // Budgets & Goals
+        return BudgetsScreen(transactions: transactions);
+      case 3: // Recurring
+        return RecurringScreen(transactions: transactions);
+      case 4: // More
+        return _buildMoreScreen();
+      default:
+        return Container();
+    }
+  }
+
+  Widget _buildConnectionCard() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1A1F29) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark
+              ? const Color(0xFF6366F1).withValues(alpha: 0.3)
+              : Colors.grey.shade300,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [Color(0xFF48BB78), Color(0xFF38A169)],
+              ),
+            ),
+            child: const Icon(Icons.check, color: Colors.white, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Connected',
+                  style: TextStyle(
+                    color: isDark ? Colors.white : Colors.black87,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  'Your account is synced',
+                  style: TextStyle(
+                    color: isDark ? Colors.grey : Colors.grey.shade600,
+                    fontSize: 12,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _disconnect,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE53E3E).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFFE53E3E).withValues(alpha: 0.3),
+                  ),
+                ),
+                child: const Text(
+                  'Disconnect',
+                  style: TextStyle(
+                    color: Color(0xFFE53E3E),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMoreScreen() {
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: Column(
+            children: [
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.flag, color: Colors.green),
+                ),
+                title: const Text('Financial Goals'),
+                subtitle: const Text('Track your savings and targets'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const GoalsScreen()),
+                  );
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.calendar_month, color: Colors.blue),
+                ),
+                title: const Text('Payment Calendar'),
+                subtitle: const Text('View upcoming bills'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => CalendarScreen(transactions: transactions),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.file_download, color: Colors.orange),
+                ),
+                title: const Text('Export Data'),
+                subtitle: const Text('Download reports and transactions'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ExportScreen(transactions: transactions),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Badge(
+                    isLabelVisible: _notificationCount > 0,
+                    label: Text('$_notificationCount'),
+                    child: const Icon(Icons.notifications, color: Colors.red),
+                  ),
+                ),
+                title: const Text('Notifications'),
+                subtitle: Text(_notificationCount > 0
+                    ? '$_notificationCount unread notifications'
+                    : 'No new notifications'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                  );
+                  final notifications = await _notificationService.getNotifications();
+                  setState(() {
+                    _notificationCount = _notificationService.getUnreadCount(notifications);
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        Card(
+          child: Column(
+            children: [
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.settings, color: Color(0xFF6366F1)),
+                ),
+                title: const Text('Settings'),
+                subtitle: const Text('App preferences and theme'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                  );
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.bug_report, color: Colors.purple),
+                ),
+                title: const Text('Debug'),
+                subtitle: const Text('Load sample data or reset'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _showDebugMenu,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -320,22 +583,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       });
     }
 
+    if (!isConnected) {
+      return _buildDisconnectedView(isDark);
+    }
+
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0F1419) : const Color(0xFFF5F5F7),
-      appBar: isConnected ? _buildConnectedAppBar(isDark) : null,
-      body: isConnected ? _buildConnectedView(isDark) : _buildDisconnectedView(isDark),
-      bottomNavigationBar: isConnected ? _buildBottomNav(isDark) : null,
-    );
-  }
-
-  PreferredSizeWidget _buildConnectedAppBar(bool isDark) {
-    return AppBar(
-      backgroundColor: isDark ? const Color(0xFF1A1F29) : Colors.white,
-      elevation: 0,
-      title: Semantics(
-        header: true,
-        label: 'Budgetly app',
-        child: Row(
+      appBar: AppBar(
+        backgroundColor: isDark ? const Color(0xFF1A1F29) : Colors.white,
+        elevation: 0,
+        title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
@@ -359,202 +616,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ],
         ),
       ),
-      actions: [
-        _buildAppBarButton(Icons.notifications, 'Notifications', isDark, () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-          );
-          // Reload notification count
-          final notifications = await _notificationService.getNotifications();
-          setState(() {
-            _notificationCount = _notificationService.getUnreadCount(notifications);
-          });
-        }, badge: _notificationCount > 0 ? _notificationCount : null),
-        _buildAppBarButton(Icons.subscriptions, 'Subscriptions', isDark, () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => SubscriptionsScreen(transactions: transactions),
-            ),
-          );
-        }),
-        _buildAppBarButton(Icons.calendar_month, 'Calendar', isDark, () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => CalendarScreen(transactions: transactions),
-            ),
-          );
-        }),
-        _buildAppBarButton(Icons.file_download, 'Export', isDark, () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ExportScreen(transactions: transactions),
-            ),
-          );
-        }),
-        PopupMenuButton<String>(
-          icon: Icon(
-            Icons.more_vert,
-            color: isDark ? Colors.white : Colors.black87,
-          ),
-          itemBuilder: (context) => <PopupMenuEntry<String>>[
-            const PopupMenuItem<String>(
-              value: 'budgets',
-              child: Row(
-                children: [
-                  Icon(Icons.account_balance_wallet, size: 20),
-                  SizedBox(width: 12),
-                  Text('Budgets'),
-                ],
-              ),
-            ),
-            const PopupMenuItem<String>(
-              value: 'goals',
-              child: Row(
-                children: [
-                  Icon(Icons.flag_outlined, size: 20),
-                  SizedBox(width: 12),
-                  Text('Goals'),
-                ],
-              ),
-            ),
-            const PopupMenuItem<String>(
-              value: 'recurring',
-              child: Row(
-                children: [
-                  Icon(Icons.autorenew, size: 20),
-                  SizedBox(width: 12),
-                  Text('Recurring'),
-                ],
-              ),
-            ),
-            const PopupMenuItem<String>(
-              value: 'settings',
-              child: Row(
-                children: [
-                  Icon(Icons.settings, size: 20),
-                  SizedBox(width: 12),
-                  Text('Settings'),
-                ],
-              ),
-            ),
-            const PopupMenuDivider(),
-            const PopupMenuItem<String>(
-              value: 'debug',
-              child: Row(
-                children: [
-                  Icon(Icons.bug_report, size: 20),
-                  SizedBox(width: 12),
-                  Text('Debug'),
-                ],
-              ),
-            ),
-          ],
-          onSelected: (value) {
-            switch (value) {
-              case 'budgets':
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => BudgetsScreen(transactions: transactions),
-                  ),
-                );
-                break;
-              case 'goals':
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const GoalsScreen()),
-                );
-                break;
-              case 'recurring':
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => RecurringScreen(transactions: transactions),
-                  ),
-                );
-                break;
-              case 'settings':
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SettingsScreen()),
-                );
-                break;
-              case 'debug':
-                _showDebugMenu();
-                break;
-            }
-          },
-        ),
-        const SizedBox(width: 8),
-      ],
-    );
-  }
-
-  Widget _buildAppBarButton(
-      IconData icon,
-      String tooltip,
-      bool isDark,
-      VoidCallback onPressed, {
-        int? badge,
-      }) {
-    return Semantics(
-      button: true,
-      label: badge != null ? '$tooltip, $badge unread' : tooltip,
-      child: Padding(
-        padding: const EdgeInsets.only(right: 8),
-        child: Stack(
-          children: [
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: onPressed,
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF262D3D) : Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, size: 20, color: isDark ? Colors.white : Colors.black87),
-                ),
-              ),
-            ),
-            if (badge != null)
-              Positioned(
-                right: 0,
-                top: 0,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
-                  ),
-                  constraints: const BoxConstraints(
-                    minWidth: 16,
-                    minHeight: 16,
-                  ),
-                  child: Text(
-                    badge > 99 ? '99+' : '$badge',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-          ],
-        ),
+      body: FadeTransition(
+        opacity: AccessibilityService.shouldReduceMotion(context)
+            ? const AlwaysStoppedAnimation(1.0)
+            : _fadeAnimation,
+        child: _getCurrentScreen(),
       ),
+      bottomNavigationBar: _buildBottomNavigation(isDark),
     );
   }
 
-  Widget _buildBottomNav(bool isDark) {
+  Widget _buildBottomNavigation(bool isDark) {
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1A1F29) : Colors.white,
@@ -568,12 +640,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavItem(Icons.receipt_long, 'Transactions', 0, isDark),
+              _buildNavItem(Icons.home_rounded, 'Home', 0, isDark),
               _buildNavItem(Icons.bar_chart_rounded, 'Analytics', 1, isDark),
+              _buildNavItem(Icons.account_balance_wallet, 'Budgets', 2, isDark),
+              _buildNavItem(Icons.autorenew, 'Recurring', 3, isDark),
+              _buildNavItem(Icons.more_horiz_rounded, 'More', 4, isDark),
             ],
           ),
         ),
@@ -583,57 +658,43 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   Widget _buildNavItem(IconData icon, String label, int index, bool isDark) {
     final isSelected = _selectedIndex == index;
-    final semanticLabel = isSelected ? '$label, selected' : label;
 
-    return Semantics(
-      button: true,
-      label: semanticLabel,
-      selected: isSelected,
-      child: GestureDetector(
-        onTap: () {
-          setState(() => _selectedIndex = index);
-          AccessibilityService.announce(context, '$label selected');
-        },
-        child: AnimatedContainer(
-          duration: AccessibilityService.getAnimationDuration(
-            context,
-            const Duration(milliseconds: 200),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          decoration: BoxDecoration(
-            gradient: isSelected
-                ? const LinearGradient(
-              colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-            )
-                : null,
-            color: isSelected ? null : Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                color: isSelected
-                    ? Colors.white
-                    : (isDark ? Colors.grey : Colors.grey.shade600),
-                size: 22,
-              ),
-              if (isSelected) ...[
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+    return Expanded(
+      child: Semantics(
+        button: true,
+        label: isSelected ? '$label, selected' : label,
+        selected: isSelected,
+        child: GestureDetector(
+          onTap: () {
+            setState(() => _selectedIndex = index);
+            AccessibilityService.announce(context, '$label selected');
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  color: isSelected
+                      ? const Color(0xFF6366F1)
+                      : (isDark ? Colors.grey : Colors.grey.shade600),
+                  size: 24,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isSelected
+                        ? const Color(0xFF6366F1)
+                        : (isDark ? Colors.grey : Colors.grey.shade600),
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -641,157 +702,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Widget _buildDisconnectedView(bool isDark) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? [const Color(0xFF0F1419), const Color(0xFF1A1F29)]
-              : [const Color(0xFFF5F5F7), Colors.white],
-        ),
-      ),
-      child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(40),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFF6366F1).withValues(alpha: 0.2),
-                      const Color(0xFF8B5CF6).withValues(alpha: 0.2),
-                    ],
-                  ),
-                ),
-                child: Container(
-                  padding: const EdgeInsets.all(30),
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.account_balance_wallet,
-                    size: 64,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 40),
-              const Text(
-                'Welcome to Budgetly',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -1,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Track subscriptions, manage budgets,\nand achieve your financial goals',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: isDark ? Colors.grey[400] : Colors.grey[600],
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 48),
-              Container(
-                width: double.infinity,
-                height: 56,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF6366F1).withValues(alpha: 0.4),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: isLoading ? null : _connectToPlaid,
-                    borderRadius: BorderRadius.circular(16),
-                    child: Center(
-                      child: isLoading
-                          ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: Colors.white,
-                        ),
-                      )
-                          : const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.link, color: Colors.white),
-                          SizedBox(width: 12),
-                          Text(
-                            'Connect Bank Account',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextButton.icon(
-                onPressed: _loadDebugData,
-                icon: const Icon(Icons.bug_report),
-                label: const Text('Load Sample Data (Debug)'),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.lock_outline,
-                    size: 16,
-                    color: isDark ? Colors.grey[600] : Colors.grey[500],
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Secured by Plaid',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark ? Colors.grey[600] : Colors.grey[500],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildConnectedView(bool isDark) {
-    return FadeTransition(
-      opacity: AccessibilityService.shouldReduceMotion(context)
-          ? const AlwaysStoppedAnimation(1.0)
-          : _fadeAnimation,
-      child: Container(
+    return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF0F1419) : const Color(0xFFF5F5F7),
+      body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -801,103 +714,137 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 : [const Color(0xFFF5F5F7), Colors.white],
           ),
         ),
-        child: Column(
-          children: [
-            Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1A1F29) : Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isDark
-                      ? const Color(0xFF6366F1).withValues(alpha: 0.3)
-                      : Colors.grey.shade300,
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        colors: [Color(0xFF48BB78), Color(0xFF38A169)],
-                      ),
-                    ),
-                    child: const Icon(Icons.check, color: Colors.white, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Connected',
-                          style: TextStyle(
-                            color: isDark ? Colors.white : Colors.black87,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          'Your account is synced',
-                          style: TextStyle(
-                            color: isDark ? Colors.grey : Colors.grey.shade600,
-                            fontSize: 12,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(40),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF6366F1).withValues(alpha: 0.2),
+                        const Color(0xFF8B5CF6).withValues(alpha: 0.2),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Material(
+                  child: Container(
+                    padding: const EdgeInsets.all(30),
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.account_balance_wallet,
+                      size: 64,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 40),
+                const Text(
+                  'Welcome to Budgetly',
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -1,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Track subscriptions, manage budgets,\nand achieve your financial goals',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: isDark ? Colors.grey[400] : Colors.grey[600],
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 48),
+                Container(
+                  width: double.infinity,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF6366F1).withValues(alpha: 0.4),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      onTap: _disconnect,
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE53E3E).withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: const Color(0xFFE53E3E).withValues(alpha: 0.3),
+                      onTap: isLoading ? null : _connectToPlaid,
+                      borderRadius: BorderRadius.circular(16),
+                      child: Center(
+                        child: isLoading
+                            ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: Colors.white,
                           ),
-                        ),
-                        child: const Text(
-                          'Disconnect',
-                          style: TextStyle(
-                            color: Color(0xFFE53E3E),
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                        )
+                            : const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.link, color: Colors.white),
+                            SizedBox(width: 12),
+                            Text(
+                              'Connect Bank Account',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 16),
+                TextButton.icon(
+                  onPressed: _loadDebugData,
+                  icon: const Icon(Icons.bug_report),
+                  label: const Text('Load Sample Data (Debug)'),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.lock_outline,
+                      size: 16,
+                      color: isDark ? Colors.grey[600] : Colors.grey[500],
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Secured by Plaid',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.grey[600] : Colors.grey[500],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            Expanded(
-              child: _selectedIndex == 0
-                  ? TransactionListWidget(
-                transactions: transactions,
-                onRefresh: _fetchTransactions,
-              )
-                  : SingleChildScrollView(
-                child: SpendingChartWidget(transactions: transactions),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
