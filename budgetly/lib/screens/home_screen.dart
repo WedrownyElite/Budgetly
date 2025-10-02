@@ -10,8 +10,10 @@ import '../services/notification_service.dart';
 import '../services/budget_storage_service.dart';
 import '../services/debug_data_service.dart';
 import '../services/subscription_service.dart';
+import '../services/transaction_storage_service.dart';
 import '../widgets/transaction_list_widget.dart';
 import '../widgets/spending_chart_widget.dart';
+import '../widgets/transaction_filters_widget.dart';
 import 'budgets_screen.dart';
 import 'goals_screen.dart';
 import 'recurring_screen.dart';
@@ -19,6 +21,7 @@ import 'settings_screen.dart';
 import 'notifications_screen.dart';
 import 'calendar_screen.dart';
 import 'export_screen.dart';
+import 'transaction_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -30,10 +33,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   bool isConnected = false;
   bool isLoading = false;
+  bool isSyncing = false;
   List<Transaction> transactions = [];
+  List<Transaction> filteredTransactions = [];
   String? accessToken;
   int _selectedIndex = 0;
   int _notificationCount = 0;
+  bool _showFilters = false;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
@@ -42,6 +48,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   final NotificationService _notificationService = NotificationService();
   final BudgetStorageService _budgetService = BudgetStorageService();
   final SubscriptionService _subscriptionService = SubscriptionService();
+  final TransactionStorageService _transactionStorage = TransactionStorageService();
 
   @override
   void initState() {
@@ -64,15 +71,29 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _checkConnectionStatus() async {
+    setState(() => isLoading = true);
+
+    // Load saved transactions first
+    final savedTransactions = await _transactionStorage.loadTransactions();
+
     final token = await _storageService.getAccessToken();
+
     if (mounted) {
       setState(() {
         accessToken = token;
-        isConnected = token != null;
+        isConnected = token != null || savedTransactions.isNotEmpty;
+        transactions = savedTransactions;
+        filteredTransactions = savedTransactions;
+        isLoading = false;
       });
 
       if (isConnected) {
-        _fetchTransactions();
+        _handleConnectionAnimation();
+
+        // If we have a token, fetch new transactions
+        if (token != null) {
+          _fetchTransactions();
+        }
       }
     }
   }
@@ -140,8 +161,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
     try {
       final debugTransactions = DebugDataService.getDebugTransactions();
+
+      // Merge with existing transactions
+      final merged = await _transactionStorage.mergeTransactions(
+        transactions,
+        debugTransactions,
+      );
+
       setState(() {
-        transactions = debugTransactions;
+        transactions = merged;
+        filteredTransactions = merged;
         isConnected = true;
         isLoading = false;
       });
@@ -158,12 +187,35 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _fetchTransactions() async {
     if (accessToken == null) return;
 
+    setState(() => isSyncing = true);
+
     try {
-      final fetchedTransactions = await _plaidService.getTransactions(accessToken!);
-      setState(() => transactions = fetchedTransactions);
+      final newTransactions = await _plaidService.getTransactions(accessToken!);
+
+      // Merge with existing saved transactions (preserving user edits)
+      final merged = await _transactionStorage.mergeTransactions(
+        transactions,
+        newTransactions,
+      );
+
+      // Save last sync time
+      await _transactionStorage.saveLastSyncTime(DateTime.now());
+
+      setState(() {
+        transactions = merged;
+        filteredTransactions = merged;
+        isSyncing = false;
+      });
+
       await _checkForNotifications();
+
+      final newCount = merged.length - transactions.length;
+      if (newCount > 0) {
+        _showSuccess('Synced! Found $newCount new transaction${newCount != 1 ? 's' : ''}');
+      }
     } catch (e) {
       _showError('Failed to fetch transactions');
+      setState(() => isSyncing = false);
     }
   }
 
@@ -216,6 +268,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         isConnected = false;
         accessToken = null;
         transactions.clear();
+        filteredTransactions.clear();
         _selectedIndex = 0;
       });
       _showSuccess('Bank account disconnected');
@@ -246,10 +299,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               onTap: () async {
                 Navigator.pop(context);
                 await _storageService.deleteAccessToken();
+                await _transactionStorage.clearAllData();
                 setState(() {
                   isConnected = false;
                   accessToken = null;
                   transactions.clear();
+                  filteredTransactions.clear();
                 });
                 _showSuccess('All data cleared');
               },
@@ -306,16 +361,55 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
+  void _onTransactionTap(Transaction transaction) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TransactionDetailScreen(
+          transaction: transaction,
+          onTransactionUpdated: (updatedTransaction) async {
+            await _transactionStorage.updateTransaction(
+              updatedTransaction,
+              transactions,
+            );
+
+            // Reload transactions
+            final reloaded = await _transactionStorage.loadTransactions();
+            setState(() {
+              transactions = reloaded;
+              filteredTransactions = reloaded;
+            });
+          },
+        ),
+      ),
+    );
+
+    if (result != null) {
+      // Transaction was updated
+      setState(() {
+        filteredTransactions = transactions;
+      });
+    }
+  }
+
   Widget _getCurrentScreen() {
     switch (_selectedIndex) {
       case 0: // Home/Transactions
         return Column(
           children: [
             _buildConnectionCard(),
+            if (_showFilters)
+              TransactionFiltersWidget(
+                allTransactions: transactions,
+                onFiltersChanged: (filtered) {
+                  setState(() => filteredTransactions = filtered);
+                },
+              ),
             Expanded(
               child: TransactionListWidget(
-                transactions: transactions,
+                transactions: filteredTransactions,
                 onRefresh: _fetchTransactions,
+                onTransactionTap: _onTransactionTap,
               ),
             ),
           ],
@@ -370,7 +464,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Connected',
+                  isSyncing ? 'Syncing...' : 'Connected',
                   style: TextStyle(
                     color: isDark ? Colors.white : Colors.black87,
                     fontWeight: FontWeight.bold,
@@ -379,7 +473,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  'Your account is synced',
+                  '${transactions.length} transactions',
                   style: TextStyle(
                     color: isDark ? Colors.grey : Colors.grey.shade600,
                     fontSize: 12,
@@ -390,6 +484,35 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
           ),
           const SizedBox(width: 8),
+          // Filter button
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                setState(() => _showFilters = !_showFilters);
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: _showFilters
+                      ? const Color(0xFF6366F1).withValues(alpha: 0.2)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Icon(
+                  Icons.filter_list,
+                  color: const Color(0xFF6366F1),
+                  size: 20,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Disconnect button
           Material(
             color: Colors.transparent,
             child: InkWell(
@@ -425,7 +548,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Widget _buildMoreScreen() {
-
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -451,6 +573,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   );
                 },
               ),
+              const Divider(height: 1),
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(10),
@@ -472,6 +595,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   );
                 },
               ),
+              const Divider(height: 1),
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(10),
@@ -493,6 +617,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   );
                 },
               ),
+              const Divider(height: 1),
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(10),
@@ -548,6 +673,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   );
                 },
               ),
+              const Divider(height: 1),
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(10),
@@ -621,8 +747,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       bottomNavigationBar: _buildBottomNavigation(isDark),
     );
   }
-
-// Replace the _buildBottomNavigation and _buildNavItem methods in home_screen.dart
 
   Widget _buildBottomNavigation(bool isDark) {
     return Container(
@@ -708,24 +832,24 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   Widget _buildDisconnectedView(bool isDark) {
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0F1419) : const Color(0xFFF5F5F7),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark
-                ? [const Color(0xFF0F1419), const Color(0xFF1A1F29)]
-                : [const Color(0xFFF5F5F7), Colors.white],
-          ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
+        backgroundColor: isDark ? const Color(0xFF0F1419) : const Color(0xFFF5F5F7),
+        body: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? [const Color(0xFF0F1419), const Color(0xFF1A1F29)]
+                    : [const Color(0xFFF5F5F7), Colors.white],
+              ),
+            ),
+            child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                  Container(
                   padding: const EdgeInsets.all(40),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
@@ -772,86 +896,86 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
                 const SizedBox(height: 48),
                 Container(
-                  width: double.infinity,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF6366F1).withValues(alpha: 0.4),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
+                    width: double.infinity,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
                       ),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: isLoading ? null : _connectToPlaid,
                       borderRadius: BorderRadius.circular(16),
-                      child: Center(
-                        child: isLoading
-                            ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Colors.white,
-                          ),
-                        )
-                            : const Row(
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF6366F1).withValues(alpha: 0.4),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                            onTap: isLoading ? null : _connectToPlaid,
+                            borderRadius: BorderRadius.circular(16),
+                            child: Center(
+                                child: isLoading
+                                    ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: Colors.white,
+                                  ),
+                                )
+                                    : const Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                    Icon(Icons.link, color: Colors.white),
+                                SizedBox(width: 12),
+                                Text(
+                                    'Connect Bank Account',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                        const SizedBox(height: 16),
+                        TextButton.icon(
+                          onPressed: _loadDebugData,
+                          icon: const Icon(Icons.bug_report),
+                          label: const Text('Load Sample Data (Debug)'),
+                        ),
+                        const SizedBox(height: 24),
+                        Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.link, color: Colors.white),
-                            SizedBox(width: 12),
+                            Icon(
+                              Icons.lock_outline,
+                              size: 16,
+                              color: isDark ? Colors.grey[600] : Colors.grey[500],
+                            ),
+                            const SizedBox(width: 8),
                             Text(
-                              'Connect Bank Account',
+                              'Secured by Plaid',
                               style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.5,
+                                fontSize: 12,
+                                color: isDark ? Colors.grey[600] : Colors.grey[500],
                               ),
                             ),
                           ],
                         ),
-                      ),
-                    ),
+                      ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                TextButton.icon(
-                  onPressed: _loadDebugData,
-                  icon: const Icon(Icons.bug_report),
-                  label: const Text('Load Sample Data (Debug)'),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.lock_outline,
-                      size: 16,
-                      color: isDark ? Colors.grey[600] : Colors.grey[500],
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Secured by Plaid',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? Colors.grey[600] : Colors.grey[500],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
             ),
-          ),
         ),
-      ),
     );
   }
 }
