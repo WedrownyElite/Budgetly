@@ -21,10 +21,16 @@ class _ExportScreenState extends State<ExportScreen> {
 
   DateTime? _startDate;
   DateTime? _endDate;
-  bool _isExporting = false;
+  bool _isExportingPDF = false;
+  bool _isExportingCSV = false;
+  bool _isExportingReport = false;
 
   Future<void> _exportTransactions(bool asPDF) async {
-    setState(() => _isExporting = true);
+    if (asPDF) {
+      setState(() => _isExportingPDF = true);
+    } else {
+      setState(() => _isExportingCSV = true);
+    }
 
     try {
       if (asPDF) {
@@ -56,14 +62,19 @@ class _ExportScreenState extends State<ExportScreen> {
         );
       }
     } finally {
-      setState(() => _isExporting = false);
+      if (mounted) {
+        setState(() {
+          _isExportingPDF = false;
+          _isExportingCSV = false;
+        });
+      }
     }
   }
 
   Future<void> _exportMonthlyReport() async {
     final now = DateTime.now();
 
-    setState(() => _isExporting = true);
+    setState(() => _isExportingReport = true);
 
     try {
       // Load all data
@@ -113,7 +124,9 @@ class _ExportScreenState extends State<ExportScreen> {
         );
       }
     } finally {
-      setState(() => _isExporting = false);
+      if (mounted) {
+        setState(() => _isExportingReport = false);
+      }
     }
   }
 
@@ -136,7 +149,7 @@ class _ExportScreenState extends State<ExportScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Export your transactions to CSV format',
+            'Export your transactions to CSV or PDF format',
             style: TextStyle(
               fontSize: 14,
               color: isDark ? Colors.grey[400] : Colors.grey[600],
@@ -229,15 +242,17 @@ class _ExportScreenState extends State<ExportScreen> {
           const SizedBox(height: 16),
 
           ElevatedButton.icon(
-            onPressed: _isExporting ? null : () => _exportTransactions(false),
-            icon: _isExporting
+            onPressed: _isExportingCSV || _isExportingPDF || _isExportingReport
+                ? null
+                : () => _exportTransactions(false),
+            icon: _isExportingCSV
                 ? const SizedBox(
               width: 16,
               height: 16,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
                 : const Icon(Icons.description),
-            label: Text(_isExporting ? 'Exporting...' : 'Export as CSV'),
+            label: Text(_isExportingCSV ? 'Exporting...' : 'Export as CSV'),
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
@@ -246,15 +261,17 @@ class _ExportScreenState extends State<ExportScreen> {
           const SizedBox(height: 12),
 
           ElevatedButton.icon(
-            onPressed: _isExporting ? null : () => _exportTransactions(true),
-            icon: _isExporting
+            onPressed: _isExportingCSV || _isExportingPDF || _isExportingReport
+                ? null
+                : () => _exportTransactions(true),
+            icon: _isExportingPDF
                 ? const SizedBox(
               width: 16,
               height: 16,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
                 : const Icon(Icons.picture_as_pdf),
-            label: Text(_isExporting ? 'Exporting...' : 'Export as PDF'),
+            label: Text(_isExportingPDF ? 'Exporting...' : 'Export as PDF'),
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
               backgroundColor: Colors.red.shade700,
@@ -299,8 +316,16 @@ class _ExportScreenState extends State<ExportScreen> {
                 '${_getMonthName(now.month)} ${now.year}',
                 style: const TextStyle(fontSize: 12),
               ),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-              onTap: _isExporting ? null : _exportMonthlyReport,
+              trailing: _isExportingReport
+                  ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+                  : const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: _isExportingCSV || _isExportingPDF || _isExportingReport
+                  ? null
+                  : _exportMonthlyReport,
             ),
           ),
 

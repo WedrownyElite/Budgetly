@@ -92,14 +92,13 @@ class ExportService {
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    if (logo != null)
-                      pw.Image(
-                        pw.MemoryImage(logo),
-                        width: 60,
-                        height: 60,
-                      ),
-                    pw.SizedBox(height: 8),
-                    pw.Text(
+                    logo != null
+                        ? pw.Image(
+                      pw.MemoryImage(logo),
+                      width: 100,
+                      height: 100,
+                    )
+                        : pw.Text(
                       'BUDGETLY',
                       style: pw.TextStyle(
                         fontSize: 24,
@@ -143,33 +142,132 @@ class ExportService {
             _buildPdfSummary(filteredTransactions),
             pw.SizedBox(height: 30),
 
-            // Transactions Table
+            // Transactions Table with Fixed Column Widths
             pw.Text(
               'Transactions',
               style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 12),
-            pw.TableHelper.fromTextArray(
-              headers: ['Date', 'Merchant', 'Category', 'Amount', 'Type'],
-              data: filteredTransactions.map((t) => [
-                t.date,
-                t.merchantName,
-                t.displayCategory,
-                '\$${t.amount.abs().toStringAsFixed(2)}',
-                t.isExpense ? 'Expense' : 'Income',
-              ]).toList(),
-              headerStyle: pw.TextStyle(
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.white,
-              ),
-              headerDecoration: pw.BoxDecoration(
-                color: PdfColor.fromHex('#6366F1'),
-              ),
-              cellAlignment: pw.Alignment.centerLeft,
-              cellPadding: const pw.EdgeInsets.all(8),
-              oddRowDecoration: const pw.BoxDecoration(
-                color: PdfColors.grey100,
-              ),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300),
+              columnWidths: {
+                0: const pw.FixedColumnWidth(70),  // Date
+                1: const pw.FixedColumnWidth(120), // Merchant (reduced from default)
+                2: const pw.FixedColumnWidth(90),  // Category
+                3: const pw.FixedColumnWidth(60),  // Amount
+                4: const pw.FixedColumnWidth(55),  // Type (increased)
+              },
+              children: [
+                // Header row
+                pw.TableRow(
+                  decoration: pw.BoxDecoration(
+                    color: PdfColor.fromHex('#6366F1'),
+                  ),
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text(
+                        'Date',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.white,
+                        ),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text(
+                        'Merchant',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.white,
+                        ),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text(
+                        'Category',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.white,
+                        ),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text(
+                        'Amount',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.white,
+                        ),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text(
+                        'Type',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                // Data rows
+                ...filteredTransactions.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final t = entry.value;
+                  return pw.TableRow(
+                    decoration: pw.BoxDecoration(
+                      color: index % 2 == 1 ? PdfColors.grey100 : PdfColors.white,
+                    ),
+                    children: [
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(8),
+                        child: pw.Text(
+                          t.date,
+                          style: const pw.TextStyle(fontSize: 9),
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(8),
+                        child: pw.Text(
+                          t.merchantName,
+                          style: const pw.TextStyle(fontSize: 9),
+                          maxLines: 2,
+                          overflow: pw.TextOverflow.clip,
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(8),
+                        child: pw.Text(
+                          t.displayCategory,
+                          style: const pw.TextStyle(fontSize: 9),
+                          maxLines: 2,
+                          overflow: pw.TextOverflow.clip,
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(8),
+                        child: pw.Text(
+                          '\$${t.amount.abs().toStringAsFixed(2)}',
+                          style: const pw.TextStyle(fontSize: 9),
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(8),
+                        child: pw.Text(
+                          t.isExpense ? 'Expense' : 'Income',
+                          style: const pw.TextStyle(fontSize: 9),
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+              ],
             ),
           ];
         },
