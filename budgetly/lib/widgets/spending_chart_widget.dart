@@ -194,8 +194,8 @@ class SpendingChartWidget extends StatelessWidget {
 
         // Spending Trend Chart
         if (recentMonths.length > 1) ...[
-          const FittedBox(
-            fit: BoxFit.scaleDown,
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
             child: Text(
               'Spending Trend',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -205,7 +205,7 @@ class SpendingChartWidget extends StatelessWidget {
           SizedBox(
             height: 250,
             child: Padding(
-              padding: const EdgeInsets.only(right: 16),
+              padding: const EdgeInsets.only(right: 16, left: 16),
               child: LineChart(
                 LineChartData(
                   gridData: FlGridData(show: true, drawVerticalLine: false),
@@ -262,7 +262,7 @@ class SpendingChartWidget extends StatelessWidget {
                       dotData: const FlDotData(show: true),
                       belowBarData: BarAreaData(
                         show: true,
-                        color: Colors.blue.withValues(alpha:0.1),
+                        color: Colors.blue.withValues(alpha: 0.1),
                       ),
                     ),
                   ],
@@ -275,8 +275,8 @@ class SpendingChartWidget extends StatelessWidget {
 
         // Pie Chart for Spending Categories
         const Center(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
             child: Text(
               'Spending by Category',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -301,21 +301,19 @@ class SpendingChartWidget extends StatelessWidget {
 
         const SizedBox(height: 24),
 
-        // Legend
-        Center (
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              children: spendingByCategory.entries.map((entry) {
-                return _buildLegendItem(
-                  entry.key.displayName,
-                  _getCategoryColor(entry.key),
-                  entry.value,
-                );
-              }).toList(),
-            ),
+        // Legend - Fixed to not use Flexible inside Wrap
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: spendingByCategory.entries.map((entry) {
+              return _buildLegendItem(
+                entry.key.displayName,
+                _getCategoryColor(entry.key),
+                entry.value,
+              );
+            }).toList(),
           ),
         ),
 
@@ -386,14 +384,11 @@ class SpendingChartWidget extends StatelessWidget {
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
-                          trailing: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              '\$${transaction.amount.toStringAsFixed(2)}',  // Fixed: proper string interpolation
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
+                          trailing: Text(
+                            '\$${transaction.amount.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         );
@@ -404,7 +399,7 @@ class SpendingChartWidget extends StatelessWidget {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Flexible(
+                          Expanded(
                             child: Text(
                               'Total (${categoryTransactions.length} transactions)',
                               style: const TextStyle(
@@ -415,14 +410,11 @@ class SpendingChartWidget extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              '\$${entry.value.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
+                          Text(
+                            '\$${entry.value.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
                             ),
                           ),
                         ],
@@ -439,7 +431,7 @@ class SpendingChartWidget extends StatelessWidget {
   }
 
   Widget _buildSummaryItem(String label, double amount, Color color) {
-    return Flexible(
+    return Expanded(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -466,7 +458,7 @@ class SpendingChartWidget extends StatelessWidget {
   }
 
   Widget _buildMonthSummary(String month, double amount, bool isCurrent) {
-    return Flexible(
+    return Expanded(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -514,28 +506,26 @@ class SpendingChartWidget extends StatelessWidget {
     }).toList();
   }
 
+  // Fixed: Removed Flexible widget from inside Wrap
   Widget _buildLegendItem(String label, Color color, double amount) {
-    return Flexible(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 16,
-            height: 16,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
           ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              '$label: \$${amount.toStringAsFixed(2)}',
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '$label: \$${amount.toStringAsFixed(2)}',
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 13),
+        ),
+      ],
     );
   }
 

@@ -7,11 +7,13 @@ import '../services/accessibility_service.dart';
 class TransactionListWidget extends StatelessWidget {
   final List<Transaction> transactions;
   final VoidCallback onRefresh;
+  final Function(Transaction)? onTransactionTap;
 
   const TransactionListWidget({
     super.key,
     required this.transactions,
     required this.onRefresh,
+    this.onTransactionTap,
   });
 
   Color _getCategoryColor(CategoryGroup group, bool isDark) {
@@ -167,14 +169,14 @@ class TransactionListWidget extends StatelessWidget {
                       ),
                     ),
                     child: const Icon(
-                      Icons.hourglass_empty_rounded,
+                      Icons.receipt_long,
                       size: 48,
                       color: Color(0xFF6366F1),
                     ),
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    'Loading transactions...',
+                    'No transactions yet',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
@@ -183,23 +185,10 @@ class TransactionListWidget extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'This may take a few seconds',
+                    'Sync your account to see transactions',
                     style: TextStyle(
                       fontSize: 14,
                       color: isDark ? Colors.white70 : Colors.grey[600],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Semantics(
-                    label: 'Loading transactions',
-                    child: SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        color: const Color(0xFF6366F1),
-                        backgroundColor: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                      ),
                     ),
                   ),
                 ],
@@ -301,7 +290,7 @@ class TransactionListWidget extends StatelessWidget {
 
     return Semantics(
       button: true,
-      label: semanticLabel,
+      label: '$semanticLabel, from ${transaction.accountName}, double tap to view details',
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
@@ -316,9 +305,7 @@ class TransactionListWidget extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
-            onTap: () {
-              // Transaction details
-            },
+            onTap: onTransactionTap != null ? () => onTransactionTap!(transaction) : null,
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: ExcludeSemantics(
@@ -351,12 +338,46 @@ class TransactionListWidget extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  transaction.displayCategory,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: categoryColor,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (transaction.customCategory != null) ...[
+                                const SizedBox(width: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'Custom',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      color: Color(0xFF6366F1),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 2),
                           Text(
-                            transaction.displayCategory,
+                            transaction.accountName,
                             style: TextStyle(
-                              fontSize: 13,
-                              color: categoryColor,
-                              fontWeight: FontWeight.w500,
+                              fontSize: 11,
+                              color: isDark ? Colors.grey[500] : Colors.grey[600],
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -365,30 +386,27 @@ class TransactionListWidget extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Flexible(
-                      flex: 0,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: transaction.isExpense
+                            ? const Color(0xFFE53E3E).withValues(alpha: 0.15)
+                            : const Color(0xFF48BB78).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '${transaction.isExpense ? '-' : '+'}\$${transaction.amount.abs().toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
                           color: transaction.isExpense
-                              ? const Color(0xFFE53E3E).withValues(alpha: 0.15)
-                              : const Color(0xFF48BB78).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(8),
+                              ? const Color(0xFFE53E3E)
+                              : const Color(0xFF48BB78),
                         ),
-                        child: Text(
-                          '${transaction.isExpense ? '-' : '+'}\$${transaction.amount.abs().toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            color: transaction.isExpense
-                                ? const Color(0xFFE53E3E)
-                                : const Color(0xFF48BB78),
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],

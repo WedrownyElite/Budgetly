@@ -622,6 +622,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
+// Replace the _buildBottomNavigation and _buildNavItem methods in home_screen.dart
+
   Widget _buildBottomNavigation(bool isDark) {
     return Container(
       decoration: BoxDecoration(
@@ -660,36 +662,43 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         button: true,
         label: isSelected ? '$label, selected' : label,
         selected: isSelected,
-        child: GestureDetector(
-          onTap: () {
-            setState(() => _selectedIndex = index);
-            AccessibilityService.announce(context, '$label selected');
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  icon,
-                  color: isSelected
-                      ? const Color(0xFF6366F1)
-                      : (isDark ? Colors.grey : Colors.grey.shade600),
-                  size: 24,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 11,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              if (_selectedIndex != index) {
+                setState(() => _selectedIndex = index);
+                AccessibilityService.announce(context, '$label selected');
+              }
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    icon,
                     color: isSelected
                         ? const Color(0xFF6366F1)
                         : (isDark ? Colors.grey : Colors.grey.shade600),
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    size: 24,
                   ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isSelected
+                          ? const Color(0xFF6366F1)
+                          : (isDark ? Colors.grey : Colors.grey.shade600),
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
