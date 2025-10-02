@@ -642,6 +642,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   });
                 },
               ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.cloud_upload, color: Colors.blue),
+                ),
+                title: const Text('Cloud Backup & Sync'),
+                subtitle: const Text('Backup and sync your data'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const BackupScreen()),
+                  );
+                },
+              ),
             ],
           ),
         ),
