@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/auth_service.dart';
+import '../services/storage_service.dart';
 import 'login_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -20,7 +21,7 @@ class SettingsScreen extends StatelessWidget {
           ],
         ),
         content: const Text(
-          'Are you sure you want to log out? Your data will remain saved on this device.',
+          'Are you sure you want to log out? Don\'t worry - your bank connection will be remembered when you log back in!',
         ),
         actions: [
           TextButton(
@@ -59,6 +60,13 @@ class SettingsScreen extends StatelessWidget {
           ),
         ),
       );
+
+      // Only clear local token, NOT from cloud (CHANGED)
+      final storageService = StorageService();
+      await storageService.deleteAccessToken();
+
+      // Note: We're NOT calling deletePlaidTokenFromCloud here
+      // This preserves the token in the cloud for when they log back in
 
       // Perform logout
       final authService = AuthService();
