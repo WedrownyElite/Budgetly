@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // ADD THIS
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:uuid/uuid.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
@@ -14,8 +15,14 @@ import 'budget_storage_service.dart';
 import 'secure_key_manager.dart';
 
 class CloudSyncService {
+  // Singleton pattern
+  static final CloudSyncService _instance = CloudSyncService._internal();
+  factory CloudSyncService() => _instance;
+  CloudSyncService._internal();
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   final TransactionStorageService _transactionStorage = TransactionStorageService();
   final BudgetStorageService _budgetStorage = BudgetStorageService();
   final SecureKeyManager _keyManager = SecureKeyManager();
@@ -23,16 +30,44 @@ class CloudSyncService {
   String? _userId;
   String? _deviceId;
   String? _encryptionKey;
+  bool _isInitialized = false;
 
   /// Initialize cloud sync with user ID
   Future<void> initialize(String userId) async {
     _userId = userId;
     _deviceId = await _keyManager.getDeviceId();
     _encryptionKey = await _keyManager.getEncryptionKey();
+    _isInitialized = true;
+
+    if (kDebugMode) {
+      debugPrint('✅ CloudSyncService initialized: userId=$_userId, deviceId=$_deviceId, hasEncryptionKey=${_encryptionKey != null}');
+    }
   }
 
-  /// Check if user is authenticated
-  bool get isAuthenticated => _userId != null;
+  /// Check if user is authenticated - NOW PROPERLY CHECKS FIREBASE AUTH
+  bool get isAuthenticated {
+    // Check both local userId AND Firebase Auth state
+    return _isInitialized &&
+        _userId != null &&
+        _auth.currentUser != null &&
+        _auth.currentUser!.uid == _userId;
+  }
+
+  /// Get current authenticated user ID
+  String? get currentUserId => _auth.currentUser?.uid;
+
+  /// Debug method - helps diagnose auth issues
+  Future<Map<String, dynamic>> getAuthDebugInfo() async {
+    return {
+      'local_userId': _userId,
+      'firebase_currentUser': _auth.currentUser?.uid,
+      'firebase_isSignedIn': _auth.currentUser != null,
+      'isAuthenticated': isAuthenticated,
+      'isInitialized': _isInitialized,
+      'encryption_key_exists': _encryptionKey != null,
+      'device_id': _deviceId,
+    };
+  }
 
   /// Check network connectivity
   Future<bool> isOnline() async {
@@ -46,8 +81,28 @@ class CloudSyncService {
 
   /// Create a full backup of all app data
   Future<BackupResult> createBackup() async {
-    if (!isAuthenticated) {
-      return BackupResult.failure('User not authenticated');
+    // IMPROVED: Check Firebase Auth directly
+    if (_auth.currentUser == null) {
+      return BackupResult.failure('User not authenticated. Please log in again.');
+    }
+
+    // Auto-initialize if not initialized but user is signed in
+    if (!_isInitialized) {
+      final currentUserId = _auth.currentUser!.uid;
+      if (kDebugMode) {
+        debugPrint('⚠️ CloudSyncService not initialized, auto-initializing with userId: $currentUserId');
+      }
+      await initialize(currentUserId);
+    }
+
+    // Verify userId matches current user
+    final currentUserId = _auth.currentUser!.uid;
+    if (_userId != currentUserId) {
+      // Reinitialize with correct userId
+      if (kDebugMode) {
+        debugPrint('⚠️ UserId mismatch. Local: $_userId, Firebase: $currentUserId. Re-initializing...');
+      }
+      await initialize(currentUserId);
     }
 
     if (!await isOnline()) {
@@ -81,16 +136,16 @@ class CloudSyncService {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final fileName = 'backup_${timestamp}_$backupId.bak';
 
-      // Upload to Cloud Storage
-      final ref = _storage.ref('users/$_userId/backups/$fileName');
+      // Upload to Cloud Storage with proper userId
+      final ref = _storage.ref('users/$currentUserId/backups/$fileName');
       final uploadTask = ref.putString(encryptedData);
 
       await uploadTask;
 
-      // Save metadata to Firestore
+      // Save metadata to Firestore with proper userId
       await _firestore
           .collection('users')
-          .doc(_userId)
+          .doc(currentUserId)
           .collection('backups')
           .doc(backupId)
           .set({
@@ -105,19 +160,30 @@ class CloudSyncService {
       });
 
       return BackupResult.success(backupId, fileName);
+    } on FirebaseAuthException catch (e) {
+      // Handle auth-specific errors
+      if (kDebugMode) {
+        debugPrint('Firebase Auth Error: ${e.code} - ${e.message}');
+      }
+      return BackupResult.failure('Authentication error: ${e.message}');
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Backup creation error: $e');
+      }
       return BackupResult.failure('Backup failed: $e');
     }
   }
 
   /// List all available backups
   Future<List<BackupMetadata>> listBackups() async {
-    if (!isAuthenticated) return [];
+    if (_auth.currentUser == null) return [];
+
+    final currentUserId = _auth.currentUser!.uid;
 
     try {
       final snapshot = await _firestore
           .collection('users')
-          .doc(_userId)
+          .doc(currentUserId)
           .collection('backups')
           .orderBy('created_at', descending: true)
           .limit(20)
@@ -146,15 +212,17 @@ class CloudSyncService {
 
   /// Restore from a specific backup
   Future<RestoreResult> restoreBackup(String backupId) async {
-    if (!isAuthenticated) {
+    if (_auth.currentUser == null) {
       return RestoreResult.failure('User not authenticated');
     }
+
+    final currentUserId = _auth.currentUser!.uid;
 
     try {
       // Get backup metadata
       final metadataDoc = await _firestore
           .collection('users')
-          .doc(_userId)
+          .doc(currentUserId)
           .collection('backups')
           .doc(backupId)
           .get();
@@ -166,7 +234,7 @@ class CloudSyncService {
       final fileName = metadataDoc.data()!['file_name'] as String;
 
       // Download backup file
-      final ref = _storage.ref('users/$_userId/backups/$fileName');
+      final ref = _storage.ref('users/$currentUserId/backups/$fileName');
       final encryptedData = await ref.getData();
 
       if (encryptedData == null) {
@@ -206,19 +274,24 @@ class CloudSyncService {
 
       return RestoreResult.success();
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Restore error: $e');
+      }
       return RestoreResult.failure('Restore failed: $e');
     }
   }
 
   /// Delete a backup
   Future<bool> deleteBackup(String backupId) async {
-    if (!isAuthenticated) return false;
+    if (_auth.currentUser == null) return false;
+
+    final currentUserId = _auth.currentUser!.uid;
 
     try {
       // Get backup metadata
       final metadataDoc = await _firestore
           .collection('users')
-          .doc(_userId)
+          .doc(currentUserId)
           .collection('backups')
           .doc(backupId)
           .get();
@@ -228,7 +301,7 @@ class CloudSyncService {
       final fileName = metadataDoc.data()!['file_name'] as String;
 
       // Delete from storage
-      final ref = _storage.ref('users/$_userId/backups/$fileName');
+      final ref = _storage.ref('users/$currentUserId/backups/$fileName');
       await ref.delete();
 
       // Delete metadata
@@ -249,13 +322,15 @@ class CloudSyncService {
 
   /// Enable real-time sync (listen to changes)
   Stream<SyncEvent> enableRealtimeSync() {
-    if (!isAuthenticated) {
+    if (_auth.currentUser == null) {
       return Stream.error('User not authenticated');
     }
 
+    final currentUserId = _auth.currentUser!.uid;
+
     return _firestore
         .collection('users')
-        .doc(_userId)
+        .doc(currentUserId)
         .collection('sync_events')
         .orderBy('timestamp', descending: true)
         .limit(1)
@@ -279,7 +354,9 @@ class CloudSyncService {
 
   /// Sync transactions to cloud
   Future<bool> syncTransactions(List<models.Transaction> transactions) async {
-    if (!isAuthenticated || !await isOnline()) return false;
+    if (_auth.currentUser == null || !await isOnline()) return false;
+
+    final currentUserId = _auth.currentUser!.uid;
 
     try {
       final batch = _firestore.batch();
@@ -287,7 +364,7 @@ class CloudSyncService {
       for (var transaction in transactions) {
         final docRef = _firestore
             .collection('users')
-            .doc(_userId)
+            .doc(currentUserId)
             .collection('transactions')
             .doc(transaction.id);
 
@@ -310,12 +387,14 @@ class CloudSyncService {
 
   /// Pull transactions from cloud
   Future<List<models.Transaction>> pullTransactions({DateTime? since}) async {
-    if (!isAuthenticated) return [];
+    if (_auth.currentUser == null) return [];
+
+    final currentUserId = _auth.currentUser!.uid;
 
     try {
       Query query = _firestore
           .collection('users')
-          .doc(_userId)
+          .doc(currentUserId)
           .collection('transactions');
 
       if (since != null) {
@@ -363,10 +442,7 @@ class CloudSyncService {
   }
 }
 
-// ============================================================================
-// DATA MODELS
-// ============================================================================
-
+// Data models remain the same...
 class BackupMetadata {
   final String backupId;
   final String fileName;

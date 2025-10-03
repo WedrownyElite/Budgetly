@@ -1,6 +1,7 @@
 ﻿// budgetly/lib/services/auth_service.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -76,13 +77,36 @@ class AuthService {
     await _auth.signOut();
   }
 
-  // Reset password
-  Future<bool> resetPassword(String email) async {
+  // Reset password with detailed error handling
+  Future<ResetPasswordResult> resetPassword(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email);
-      return true;
+
+      if (kDebugMode) {
+        print('✅ Password reset email sent to: $email');
+      }
+
+      return ResetPasswordResult.success();
+    } on FirebaseAuthException catch (e) {
+      if (kDebugMode) {
+        print('❌ Firebase Auth Error: ${e.code} - ${e.message}');
+      }
+
+      switch (e.code) {
+        case 'user-not-found':
+          return ResetPasswordResult.failure('No account found with this email address');
+        case 'invalid-email':
+          return ResetPasswordResult.failure('Invalid email address format');
+        case 'missing-email':
+          return ResetPasswordResult.failure('Please enter an email address');
+        default:
+          return ResetPasswordResult.failure('Failed to send reset email. Please try again.');
+      }
     } catch (e) {
-      return false;
+      if (kDebugMode) {
+        print('❌ General Error: $e');
+      }
+      return ResetPasswordResult.failure('An error occurred. Please check your connection and try again.');
     }
   }
 
@@ -129,4 +153,15 @@ class AuthResult {
   AuthResult.failure(this.errorMessage)
       : success = false,
         user = null;
+}
+
+class ResetPasswordResult {
+  final bool success;
+  final String? errorMessage;
+
+  ResetPasswordResult.success()
+      : success = true,
+        errorMessage = null;
+
+  ResetPasswordResult.failure(this.errorMessage) : success = false;
 }

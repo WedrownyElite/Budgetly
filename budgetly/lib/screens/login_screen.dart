@@ -45,6 +45,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _checkAuthState() async {
     if (_authService.isSignedIn) {
+      // Initialize sync service if already signed in
+      await _syncService.initialize(_authService.userId!);
       _navigateToHome();
     }
   }
@@ -54,27 +56,41 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
 
-    final result = _isSignUp
-        ? await _authService.signUp(
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
-    )
-        : await _authService.signIn(
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
-    );
+    try {
+      final result = _isSignUp
+          ? await _authService.signUp(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      )
+          : await _authService.signIn(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
 
-    if (mounted) {
-      if (result.success) {
-        // Initialize sync service
-        await _syncService.initialize(result.user!.uid);
-        _navigateToHome();
-      } else {
+      if (mounted) {
+        if (result.success) {
+          // Initialize sync service with user ID
+          await _syncService.initialize(result.user!.uid);
+          _navigateToHome();
+        } else {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.errorMessage ?? 'Authentication failed'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result.errorMessage ?? 'Authentication failed'),
+            content: Text('Error: ${e.toString()}'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -100,6 +116,254 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     }
+  }
+
+  Future<void> _showForgotPasswordDialog() async {
+    final emailController = TextEditingController(text: _emailController.text.trim());
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.lock_reset, color: Color(0xFF6366F1)),
+            SizedBox(width: 12),
+            Text('Reset Password'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter your email address and we\'ll send you a link to reset your password.',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                prefixIcon: Icon(Icons.email),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Send Reset Email'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      final email = emailController.text.trim();
+
+      if (email.isEmpty || !email.contains('@')) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please enter a valid email address'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        emailController.dispose();
+        return;
+      }
+
+      // Show loading
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Sending reset email...'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
+      // Send reset email
+      final resetResult = await _authService.resetPassword(email);
+
+      if (mounted) {
+        // Close loading dialog
+        Navigator.pop(context);
+
+        if (resetResult.success) {
+          // Show success dialog that must be dismissed
+          await showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check_circle,
+                      color: Colors.green,
+                      size: 32,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Email Sent!',
+                      style: TextStyle(fontSize: 22),
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  RichText(
+                    text: TextSpan(
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Theme.of(context).textTheme.bodyLarge?.color,
+                        height: 1.5,
+                      ),
+                      children: [
+                        const TextSpan(
+                          text: 'We\'ve sent a password reset link to:\n',
+                        ),
+                        TextSpan(
+                          text: email,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF6366F1),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.orange.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          color: Colors.orange,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: RichText(
+                            text: const TextSpan(
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.orange,
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: 'Check your spam folder!\n',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: 'Sometimes emails end up there.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    '• The link expires in 1 hour\n• Check your spam/junk folder\n• The email is from noreply@budgetly-2a825.firebaseapp.com',
+                    style: TextStyle(fontSize: 13, height: 1.6),
+                  ),
+                ],
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                  ),
+                  child: const Text('Got It'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          // Show error dialog
+          await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red),
+                  SizedBox(width: 12),
+                  Text('Error'),
+                ],
+              ),
+              content: Text(
+                resetResult.errorMessage ?? 'Failed to send reset email',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _showForgotPasswordDialog();
+                  },
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          );
+        }
+      }
+    }
+
+    emailController.dispose();
   }
 
   void _navigateToHome() {
@@ -240,6 +504,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           : Text(_isSignUp ? 'Sign Up' : 'Sign In'),
                     ),
                   ),
+
+                  // Forgot Password (only show on Sign In)
+                  if (!_isSignUp) ...[
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: _showForgotPasswordDialog,
+                      child: const Text('Forgot Password?'),
+                    ),
+                  ],
+
                   const SizedBox(height: 16),
 
                   // Toggle sign up/sign in
@@ -271,16 +545,28 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Continue without account (anonymous)
-                  OutlinedButton(
-                    onPressed: _isLoading ? null : _signInAnonymously,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      side: BorderSide(
-                        color: isDark ? Colors.grey[700]! : Colors.grey[400]!,
+                  // Continue without account (anonymous) - BIGGER BUTTON
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: _isLoading ? null : _signInAnonymously,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 16,
+                          horizontal: 24,
+                        ),
+                        side: BorderSide(
+                          color: isDark ? Colors.grey[700]! : Colors.grey[400]!,
+                        ),
+                      ),
+                      child: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'Continue Without Account',
+                          style: TextStyle(fontSize: 15),
+                        ),
                       ),
                     ),
-                    child: const Text('Continue Without Account'),
                   ),
                   const SizedBox(height: 24),
 

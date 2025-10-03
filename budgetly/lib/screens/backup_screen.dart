@@ -39,7 +39,19 @@ class _BackupScreenState extends State<BackupScreen> {
   }
 
   Future<void> _createBackup() async {
-    setState(() => _isCreatingBackup = true);
+    final debugInfo = await _syncService.getAuthDebugInfo();
+    print('🔍 Auth Debug Info: $debugInfo');
+
+    // Show debug info in UI
+    if (mounted && !debugInfo['isAuthenticated']) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Auth Issue: Firebase user=${debugInfo['firebase_currentUser']}, Local user=${debugInfo['local_userId']}'),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
 
     final result = await _syncService.createBackup();
 

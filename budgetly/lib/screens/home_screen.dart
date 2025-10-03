@@ -1,6 +1,7 @@
 ﻿// budgetly/lib/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:plaid_flutter/plaid_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/transaction.dart';
 import '../models/budget.dart';
 import '../services/plaid_service.dart';
@@ -77,7 +78,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     // Load saved transactions first
     final savedTransactions = await _transactionStorage.loadTransactions();
 
-    final token = await _storageService.getAccessToken();
+    // Check local token
+    String? token = await _storageService.getAccessToken();
+
+    // If no local token, try to get from cloud (NEW)
+    if (token == null) {
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      if (userId != null) {
+        token = await _storageService.getPlaidTokenFromCloud(userId);
+        if (token != null) {
+          // Restore to local storage
+          await _storageService.saveAccessToken(token);
+        }
+      }
+    }
 
     if (mounted) {
       setState(() {
@@ -106,9 +120,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     } else {
       _animationController.forward();
     }
-  }
-
-  Future<void> _connectToPlaid() async {
+    
+  }Future<void> _connectToPlaid() async {
     setState(() => isLoading = true);
 
     try {
@@ -124,7 +137,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       PlaidLink.onSuccess.listen((success) async {
         final token = await _plaidService.exchangePublicToken(success.publicToken);
         if (token != null) {
+          // Save locally
           await _storageService.saveAccessToken(token);
+
+          // Save to cloud for this user (NEW)
+          final userId = FirebaseAuth.instance.currentUser?.uid;
+          if (userId != null) {
+            await _storageService.savePlaidTokenToCloud(userId, token);
+          }
+
           if (mounted) {
             setState(() {
               accessToken = token;
@@ -258,7 +279,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _disconnect() async {
+    // Delete from cloud (NEW)
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId != null) {
+      await _storageService.deletePlaidTokenFromCloud(userId);
+    }
+
+    // Delete from local storage
     await _storageService.deleteAccessToken();
+
     if (mounted) {
       if (MediaQuery.of(context).disableAnimations) {
         _animationController.value = 0.0;
