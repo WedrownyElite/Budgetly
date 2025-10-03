@@ -264,7 +264,7 @@
         <entry key="flutter">
           <value>
             <list>
-              <option value="$USER_HOME$/dev/flutter/packages/flutter/lib" />
+              <option value="$USER_HOME$/flutter/packages/flutter/lib" />
             </list>
           </value>
         </entry>
@@ -320,7 +320,28 @@
         <entry key="flutter_test">
           <value>
             <list>
-              <option value="$USER_HOME$/dev/flutter/packages/flutter_test/lib" />
+              <option value="$USER_HOME$/flutter/packages/flutter_test/lib" />
+            </list>
+          </value>
+        </entry>
+        <entry key="flutter_web_plugins">
+          <value>
+            <list>
+              <option value="$USER_HOME$/flutter/packages/flutter_web_plugins/lib" />
+            </list>
+          </value>
+        </entry>
+        <entry key="http">
+          <value>
+            <list>
+              <option value="$USER_HOME$/AppData/Local/Pub/Cache/hosted/pub.dev/http-1.5.0/lib" />
+            </list>
+          </value>
+        </entry>
+        <entry key="http_parser">
+          <value>
+            <list>
+              <option value="$USER_HOME$/AppData/Local/Pub/Cache/hosted/pub.dev/http_parser-4.1.2/lib" />
             </list>
           </value>
         </entry>
@@ -670,7 +691,7 @@
         <entry key="sky_engine">
           <value>
             <list>
-              <option value="$USER_HOME$/dev/flutter/bin/cache/pkg/sky_engine/lib" />
+              <option value="$USER_HOME$/flutter/bin/cache/pkg/sky_engine/lib" />
             </list>
           </value>
         </entry>
