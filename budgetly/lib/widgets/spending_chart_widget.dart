@@ -1,5 +1,4 @@
-﻿// budgetly/lib/widgets/spending_chart_widget.dart - UPDATED VERSION
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/transaction.dart';
 
@@ -170,15 +169,18 @@ class SpendingChartWidget extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: changePercent > 0
-                            ? Colors.red.withValues(alpha:0.1)
-                            : Colors.green.withValues(alpha:0.1),
+                            ? Colors.red.withValues(alpha: 0.1)
+                            : Colors.green.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Text(
-                        '${changePercent > 0 ? '+' : ''}${changePercent.toStringAsFixed(1)}% vs last month',
-                        style: TextStyle(
-                          color: changePercent > 0 ? Colors.red : Colors.green,
-                          fontWeight: FontWeight.bold,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '${changePercent > 0 ? '+' : ''}${changePercent.toStringAsFixed(1)}% vs last month',
+                          style: TextStyle(
+                            color: changePercent > 0 ? Colors.red : Colors.green,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
@@ -192,15 +194,18 @@ class SpendingChartWidget extends StatelessWidget {
 
         // Spending Trend Chart
         if (recentMonths.length > 1) ...[
-          const Text(
-            'Spending Trend',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Spending Trend',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
           ),
           const SizedBox(height: 16),
           SizedBox(
             height: 250,
             child: Padding(
-              padding: const EdgeInsets.only(right: 16),
+              padding: const EdgeInsets.only(right: 16, left: 16),
               child: LineChart(
                 LineChartData(
                   gridData: FlGridData(show: true, drawVerticalLine: false),
@@ -257,7 +262,7 @@ class SpendingChartWidget extends StatelessWidget {
                       dotData: const FlDotData(show: true),
                       belowBarData: BarAreaData(
                         show: true,
-                        color: Colors.blue.withValues(alpha:0.1),
+                        color: Colors.blue.withValues(alpha: 0.1),
                       ),
                     ),
                   ],
@@ -269,11 +274,16 @@ class SpendingChartWidget extends StatelessWidget {
         ],
 
         // Pie Chart for Spending Categories
-        const Text(
-          'Spending by Category',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        const Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Spending by Category',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
 
         SizedBox(
           height: 250,
@@ -289,54 +299,131 @@ class SpendingChartWidget extends StatelessWidget {
           ),
         ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
 
-        // Legend
-        Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          children: spendingByCategory.entries.map((entry) {
-            return _buildLegendItem(
-              entry.key.displayName,
-              _getCategoryColor(entry.key),
-              entry.value,
-            );
-          }).toList(),
+        // Legend - Fixed to not use Flexible inside Wrap
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: spendingByCategory.entries.map((entry) {
+              return _buildLegendItem(
+                entry.key.displayName,
+                _getCategoryColor(entry.key),
+                entry.value,
+              );
+            }).toList(),
+          ),
         ),
 
         const SizedBox(height: 24),
 
         // Top Categories This Month
         if (categoryByMonth.containsKey(currentMonth)) ...[
-          const Text(
-            'Top Spending Categories This Month',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Top Spending Categories This Month',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
           ),
           const SizedBox(height: 12),
           ...(() {
             final categories = categoryByMonth[currentMonth]!.entries.toList()
               ..sort((a, b) => b.value.compareTo(a.value));
-            return categories.take(5).map((entry) => Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: entry.key.color.withValues(alpha:0.2),
-                  child: Icon(
-                    Icons.category,
-                    color: entry.key.color,
-                    size: 20,
+            return categories.take(5).map((entry) {
+              final categoryTransactions = transactions
+                  .where((t) =>
+              t.spendingCategory.group == entry.key &&
+                  t.date.startsWith(currentMonth) &&
+                  t.isExpense &&
+                  t.spendingCategory != SpendingCategory.transfer)
+                  .toList()
+                ..sort((a, b) => b.amount.compareTo(a.amount));
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8, left: 16, right: 16),
+                child: ExpansionTile(
+                  leading: CircleAvatar(
+                    backgroundColor: entry.key.color.withValues(alpha: 0.2),
+                    child: Icon(
+                      Icons.category,
+                      color: entry.key.color,
+                      size: 20,
+                    ),
                   ),
-                ),
-                title: Text(entry.key.displayName),
-                trailing: Text(
-                  '\$${entry.value.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                  title: Text(entry.key.displayName),
+                  trailing: Text(
+                    '\$${entry.value.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
+                  children: [
+                    const Divider(height: 1),
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: categoryTransactions.length,
+                      itemBuilder: (context, index) {
+                        final transaction = categoryTransactions[index];
+                        return ListTile(
+                          dense: true,
+                          title: Text(
+                            transaction.merchantName,
+                            style: const TextStyle(fontSize: 14),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            transaction.date,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: Text(
+                            '\$${transaction.amount.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Total (${categoryTransactions.length} transactions)',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '\$${entry.value.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  ],
                 ),
-              ),
-            ));
+              );
+            });
           })(),
         ],
       ],
@@ -344,46 +431,60 @@ class SpendingChartWidget extends StatelessWidget {
   }
 
   Widget _buildSummaryItem(String label, double amount, Color color) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '\$${amount.abs().toStringAsFixed(2)}',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: color,
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            overflow: TextOverflow.ellipsis,
           ),
-        ),
-      ],
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              '\$${amount.abs().toStringAsFixed(2)}',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildMonthSummary(String month, double amount, bool isCurrent) {
-    return Column(
-      children: [
-        Text(
-          month,
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.grey[600],
-            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            month,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
+              fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+            ),
+            overflow: TextOverflow.ellipsis,
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '\$${amount.toStringAsFixed(2)}',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: isCurrent ? Colors.blue : Colors.grey[700],
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              '\$${amount.toStringAsFixed(2)}',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: isCurrent ? Colors.blue : Colors.grey[700],
+              ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -405,6 +506,7 @@ class SpendingChartWidget extends StatelessWidget {
     }).toList();
   }
 
+  // Fixed: Removed Flexible widget from inside Wrap
   Widget _buildLegendItem(String label, Color color, double amount) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -418,7 +520,11 @@ class SpendingChartWidget extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        Text('$label: \$${amount.toStringAsFixed(2)}'),
+        Text(
+          '$label: \$${amount.toStringAsFixed(2)}',
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 13),
+        ),
       ],
     );
   }

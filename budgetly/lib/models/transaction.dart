@@ -8,6 +8,7 @@ class Transaction {
   final String date;
   final List<String> plaidCategories; // Store full category array
   final SpendingCategory spendingCategory;
+  final String? customCategory; // Add custom category support
 
   Transaction({
     required this.id,
@@ -17,12 +18,13 @@ class Transaction {
     required this.date,
     required this.plaidCategories,
     required this.spendingCategory,
+    this.customCategory,
   });
 
   bool get isExpense => amount > 0;
   bool get isIncome => amount < 0;
 
-  String get displayCategory => spendingCategory.displayName;
+  String get displayCategory => customCategory ?? spendingCategory.displayName;
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
     final categories = (json['category'] as List?)?.map((e) => e.toString()).toList() ?? ['Other'];
@@ -36,6 +38,42 @@ class Transaction {
       date: json['date'] as String? ?? '',
       plaidCategories: categories,
       spendingCategory: SpendingCategory.fromPlaidCategories(categories, merchantName),
+      customCategory: json['custom_category'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'transaction_id': id,
+      'account_name': accountName,
+      'merchant_name': merchantName,
+      'name': merchantName,
+      'amount': amount,
+      'date': date,
+      'category': plaidCategories,
+      'custom_category': customCategory,
+    };
+  }
+
+  Transaction copyWith({
+    String? id,
+    String? accountName,
+    String? merchantName,
+    double? amount,
+    String? date,
+    List<String>? plaidCategories,
+    SpendingCategory? spendingCategory,
+    String? customCategory,
+  }) {
+    return Transaction(
+      id: id ?? this.id,
+      accountName: accountName ?? this.accountName,
+      merchantName: merchantName ?? this.merchantName,
+      amount: amount ?? this.amount,
+      date: date ?? this.date,
+      plaidCategories: plaidCategories ?? this.plaidCategories,
+      spendingCategory: spendingCategory ?? this.spendingCategory,
+      customCategory: customCategory ?? this.customCategory,
     );
   }
 }
@@ -194,7 +232,7 @@ enum SpendingCategory {
     if (merchant.contains('bicycle') || merchant.contains('bike shop')) {
       return SpendingCategory.sports;
     }
-    
+
     if (merchant.contains('tectra inc')) {
       return SpendingCategory.professionalServices;
     }

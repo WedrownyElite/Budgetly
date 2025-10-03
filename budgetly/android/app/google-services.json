@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "950810331303",
+    "project_id": "budgetly-2a825",
+    "storage_bucket": "budgetly-2a825.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:950810331303:android:b5b8dfaf798ac625c5f382",
+        "android_client_info": {
+          "package_name": "com.oddologyinc.budgetly"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDpUNuzJjbxb3EyO3vgrXb2Ep8cBI9DomU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:950810331303:android:a92eba85dd63d33ec5f382",
+        "android_client_info": {
+          "package_name": "com.oddologyinc.budgetlyapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDpUNuzJjbxb3EyO3vgrXb2Ep8cBI9DomU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
