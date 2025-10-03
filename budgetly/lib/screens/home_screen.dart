@@ -78,13 +78,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     // Load saved transactions first
     final savedTransactions = await _transactionStorage.loadTransactions();
 
-    // Check local token
+    // Check local token first
     String? token = await _storageService.getAccessToken();
 
-    // If no local token, try to get from cloud (NEW)
+    // If no local token, try to get from cloud for authenticated users
     if (token == null) {
       final userId = FirebaseAuth.instance.currentUser?.uid;
-      if (userId != null) {
+      if (userId != null && !(FirebaseAuth.instance.currentUser?.isAnonymous ?? true)) {
+        // Only fetch from cloud if user is authenticated (not anonymous)
         token = await _storageService.getPlaidTokenFromCloud(userId);
         if (token != null) {
           // Restore to local storage
@@ -121,7 +122,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       _animationController.forward();
     }
     
-  }Future<void> _connectToPlaid() async {
+  }
+
+  Future<void> _connectToPlaid() async {
     setState(() => isLoading = true);
 
     try {
@@ -137,12 +140,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       PlaidLink.onSuccess.listen((success) async {
         final token = await _plaidService.exchangePublicToken(success.publicToken);
         if (token != null) {
-          // Save locally
+          // Save locally first
           await _storageService.saveAccessToken(token);
 
-          // Save to cloud for this user (NEW)
+          // Save to cloud for authenticated users (not anonymous)
           final userId = FirebaseAuth.instance.currentUser?.uid;
-          if (userId != null) {
+          if (userId != null && !(FirebaseAuth.instance.currentUser?.isAnonymous ?? true)) {
             await _storageService.savePlaidTokenToCloud(userId, token);
           }
 
@@ -151,8 +154,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               accessToken = token;
               isConnected = true;
               isLoading = false;
+              isSyncing = true;
             });
             _handleConnectionAnimation();
+
+            // Fetch transactions AFTER UI update
             _fetchTransactions();
             _showSuccess('Bank account connected successfully!');
           }
@@ -223,21 +229,27 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       // Save last sync time
       await _transactionStorage.saveLastSyncTime(DateTime.now());
 
-      setState(() {
-        transactions = merged;
-        filteredTransactions = merged;
-        isSyncing = false;
-      });
+      if (mounted) {
+        setState(() {
+          transactions = merged;
+          filteredTransactions = merged;
+          isSyncing = false;  // Ensure syncing is set to false
+        });
 
-      await _checkForNotifications();
+        await _checkForNotifications();
 
-      final newCount = merged.length - transactions.length;
-      if (newCount > 0) {
-        _showSuccess('Synced! Found $newCount new transaction${newCount != 1 ? 's' : ''}');
+        final newCount = newTransactions.length;
+        if (newCount > 0) {
+          _showSuccess('Synced! Found $newCount new transaction${newCount != 1 ? 's' : ''}');
+        } else {
+          _showSuccess('Synced! Your transactions are up to date');
+        }
       }
     } catch (e) {
       _showError('Failed to fetch transactions');
-      setState(() => isSyncing = false);
+      if (mounted) {
+        setState(() => isSyncing = false);  // Ensure syncing is set to false even on error
+      }
     }
   }
 
@@ -279,14 +291,42 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _disconnect() async {
-    // Delete from cloud (NEW)
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Disconnect Bank'),
+        content: const Text(
+          'This will disconnect your bank account from the app. Your transaction history will be cleared. Are you sure?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Disconnect'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    // Get user ID before deleting
     final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId != null) {
+
+    // Delete from cloud (if authenticated user)
+    if (userId != null && !(FirebaseAuth.instance.currentUser?.isAnonymous ?? true)) {
       await _storageService.deletePlaidTokenFromCloud(userId);
     }
 
     // Delete from local storage
     await _storageService.deleteAccessToken();
+
+    // Clear transaction data
+    await _transactionStorage.clearAllData();
 
     if (mounted) {
       if (MediaQuery.of(context).disableAnimations) {
@@ -477,13 +517,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         children: [
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: LinearGradient(
+              gradient: isSyncing
+                  ? null
+                  : const LinearGradient(
                 colors: [Color(0xFF48BB78), Color(0xFF38A169)],
               ),
+              color: isSyncing ? Colors.orange : null,
             ),
-            child: const Icon(Icons.check, color: Colors.white, size: 20),
+            child: isSyncing
+                ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            )
+                : const Icon(Icons.check, color: Colors.white, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -501,7 +553,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  '${transactions.length} transactions',
+                  isSyncing
+                      ? 'Loading transactions...'
+                      : '${transactions.length} transactions',
                   style: TextStyle(
                     color: isDark ? Colors.grey : Colors.grey.shade600,
                     fontSize: 12,

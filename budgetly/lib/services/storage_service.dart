@@ -5,10 +5,12 @@ import 'package:encrypt/encrypt.dart' as encrypt;
 import 'dart:convert';
 import 'dart:typed_data';
 import '../utils/constants.dart';
+import 'secure_key_manager.dart';
 
 class StorageService {
   final _storage = const FlutterSecureStorage();
   final _firestore = FirebaseFirestore.instance;
+  final _keyManager = SecureKeyManager();
 
   // Local storage (for current session)
   Future<String?> getAccessToken() async {
@@ -23,12 +25,18 @@ class StorageService {
     await _storage.delete(key: AppConstants.accessTokenKey);
   }
 
-  String _encryptData(String plainText) {
+  Future<String> _encryptData(String plainText) async {
     try {
-      // Use a synchronous approach with a deterministic key derivation
-      // Note: In production, you should use _getEncryptionKey() with proper async handling
-      final keyBytes = utf8.encode('your-secure-32-char-key-here!!'); // Replace with secure key
-      final key = encrypt.Key(Uint8List.fromList(keyBytes.take(32).toList()));
+      // Get the encryption key from SecureKeyManager (ensures 32 characters)
+      final encryptionKey = await _keyManager.getEncryptionKey();
+
+      // Convert to bytes and ensure it's exactly 32 bytes
+      final keyBytes = utf8.encode(encryptionKey);
+      if (keyBytes.length != 32) {
+        throw Exception('Encryption key must be exactly 32 bytes');
+      }
+
+      final key = encrypt.Key(Uint8List.fromList(keyBytes));
       final iv = encrypt.IV.fromLength(16);
 
       final encrypter = encrypt.Encrypter(encrypt.AES(key));
@@ -42,7 +50,7 @@ class StorageService {
     }
   }
 
-  String _decryptData(String encryptedText) {
+  Future<String> _decryptData(String encryptedText) async {
     try {
       final combined = base64.decode(encryptedText);
 
@@ -50,8 +58,14 @@ class StorageService {
       final iv = encrypt.IV(Uint8List.fromList(combined.take(16).toList()));
       final encryptedBytes = Uint8List.fromList(combined.skip(16).toList());
 
-      final keyBytes = utf8.encode('your-secure-32-char-key-here!!'); // Must match encryption key
-      final key = encrypt.Key(Uint8List.fromList(keyBytes.take(32).toList()));
+      // Get the encryption key from SecureKeyManager
+      final encryptionKey = await _keyManager.getEncryptionKey();
+      final keyBytes = utf8.encode(encryptionKey);
+      if (keyBytes.length != 32) {
+        throw Exception('Encryption key must be exactly 32 bytes');
+      }
+
+      final key = encrypt.Key(Uint8List.fromList(keyBytes));
 
       final encrypter = encrypt.Encrypter(encrypt.AES(key));
       final encrypted = encrypt.Encrypted(encryptedBytes);
@@ -66,8 +80,9 @@ class StorageService {
   // Cloud storage (for persistence across sessions)
   Future<void> savePlaidTokenToCloud(String userId, String accessToken) async {
     try {
+      final encryptedToken = await _encryptData(accessToken);
       await _firestore.collection('users').doc(userId).set({
-        'plaid_access_token': _encryptData(accessToken),
+        'plaid_access_token': encryptedToken,
         'updated_at': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } catch (e) {
@@ -82,7 +97,7 @@ class StorageService {
       if (doc.exists) {
         final encryptedToken = doc.data()?['plaid_access_token'] as String?;
         if (encryptedToken != null) {
-          return _decryptData(encryptedToken);
+          return await _decryptData(encryptedToken);
         }
       }
       return null;

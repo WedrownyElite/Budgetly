@@ -21,7 +21,7 @@ class SettingsScreen extends StatelessWidget {
           ],
         ),
         content: const Text(
-          'Are you sure you want to log out? Don\'t worry - your bank connection will be remembered when you log back in!',
+          'Are you sure you want to log out? Your bank connection will be saved to your account and restored when you log back in.',
         ),
         actions: [
           TextButton(
@@ -61,26 +61,51 @@ class SettingsScreen extends StatelessWidget {
         ),
       );
 
-      // Only clear local token, NOT from cloud (CHANGED)
-      final storageService = StorageService();
-      await storageService.deleteAccessToken();
+      try {
+        final authService = AuthService();
+        final storageService = StorageService();
 
-      // Note: We're NOT calling deletePlaidTokenFromCloud here
-      // This preserves the token in the cloud for when they log back in
+        // Get current user ID before signing out
+        final userId = authService.userId;
 
-      // Perform logout
-      final authService = AuthService();
-      await authService.signOut();
+        // Get the current access token
+        final accessToken = await storageService.getAccessToken();
 
-      if (context.mounted) {
-        // Close loading dialog
-        Navigator.pop(context);
+        // If user has a Plaid token and is authenticated (not anonymous)
+        if (userId != null && accessToken != null && !authService.currentUser!.isAnonymous) {
+          // Save token to cloud before deleting locally
+          await storageService.savePlaidTokenToCloud(userId, accessToken);
+        }
 
-        // Navigate to login screen
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
-              (route) => false,
-        );
+        // Delete local token (this clears it from the device)
+        await storageService.deleteAccessToken();
+
+        // Sign out from Firebase
+        await authService.signOut();
+
+        if (context.mounted) {
+          // Close loading dialog
+          Navigator.pop(context);
+
+          // Navigate to login screen
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+                (route) => false,
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          // Close loading dialog
+          Navigator.pop(context);
+
+          // Show error
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Logout failed: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
