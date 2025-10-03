@@ -45,6 +45,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _checkAuthState() async {
     if (_authService.isSignedIn) {
+      // Initialize sync service if already signed in
+      await _syncService.initialize(_authService.userId!);
       _navigateToHome();
     }
   }
@@ -54,27 +56,41 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
 
-    final result = _isSignUp
-        ? await _authService.signUp(
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
-    )
-        : await _authService.signIn(
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
-    );
+    try {
+      final result = _isSignUp
+          ? await _authService.signUp(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      )
+          : await _authService.signIn(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
 
-    if (mounted) {
-      if (result.success) {
-        // Initialize sync service
-        await _syncService.initialize(result.user!.uid);
-        _navigateToHome();
-      } else {
+      if (mounted) {
+        if (result.success) {
+          // Initialize sync service with user ID
+          await _syncService.initialize(result.user!.uid);
+          _navigateToHome();
+        } else {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.errorMessage ?? 'Authentication failed'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result.errorMessage ?? 'Authentication failed'),
+            content: Text('Error: ${e.toString()}'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -100,6 +116,124 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     }
+  }
+
+  Future<void> _showForgotPasswordDialog() async {
+    final emailController = TextEditingController(text: _emailController.text.trim());
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.lock_reset, color: Color(0xFF6366F1)),
+            SizedBox(width: 12),
+            Text('Reset Password'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter your email address and we\'ll send you a link to reset your password.',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                prefixIcon: Icon(Icons.email),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Send Reset Email'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      final email = emailController.text.trim();
+
+      if (email.isEmpty || !email.contains('@')) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please enter a valid email address'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Show loading
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Sending reset email...'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
+      // Send reset email
+      final success = await _authService.resetPassword(email);
+
+      if (mounted) {
+        // Close loading dialog
+        Navigator.pop(context);
+
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Password reset email sent to $email'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'OK',
+                textColor: Colors.white,
+                onPressed: () {},
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to send reset email. Please check the email address.'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+    }
+
+    emailController.dispose();
   }
 
   void _navigateToHome() {
@@ -240,6 +374,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           : Text(_isSignUp ? 'Sign Up' : 'Sign In'),
                     ),
                   ),
+
+                  // Forgot Password (only show on Sign In)
+                  if (!_isSignUp) ...[
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: _showForgotPasswordDialog,
+                      child: const Text('Forgot Password?'),
+                    ),
+                  ],
+
                   const SizedBox(height: 16),
 
                   // Toggle sign up/sign in
