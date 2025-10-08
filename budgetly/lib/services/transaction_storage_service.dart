@@ -11,30 +11,85 @@ class TransactionStorageService {
   String _getUserKey(String baseKey, String userId) {
     return '${baseKey}_$userId';
   }
-  
-  // Save all transactions to local storage
+
+// Save all transactions to local storage
   Future<void> saveTransactions(List<Transaction> transactions, String userId) async {
+    print('💾 [STORAGE] saveTransactions called');
+    print('📝 User ID: $userId');
+    print('📝 Transaction count: ${transactions.length}');
+
     final prefs = await SharedPreferences.getInstance();
     final key = _getUserKey(_transactionsKey, userId);
+    print('📝 Storage key: $key');
+
     final jsonList = transactions.map((t) => t.toJson()).toList();
-    await prefs.setString(key, jsonEncode(jsonList));
-  } 
+
+    // Log the specific transaction we're tracking
+    final trackingIndex = transactions.indexWhere((t) => t.id == '1xMMP5Qk6aTmQk6B9lvBimNnNo9oBqUpJjaRR');
+    if (trackingIndex != -1) {
+      print('🔍 [STORAGE] Found tracked transaction at index $trackingIndex');
+      print('📝 Category before JSON: ${transactions[trackingIndex].spendingCategory.displayName}');
+      print('📝 Custom category before JSON: ${transactions[trackingIndex].customCategory}');
+      print('📝 JSON data: ${jsonList[trackingIndex]}');
+    }
+
+    final jsonString = jsonEncode(jsonList);
+    print('📝 Total JSON length: ${jsonString.length}');
+
+    final result = await prefs.setString(key, jsonString);
+    print('✅ [STORAGE] Save result: $result');
+
+    // Verify the save immediately
+    final verification = prefs.getString(key);
+    if (verification != null) {
+      print('✅ [STORAGE] Verification: String exists in SharedPreferences');
+      print('📝 Verification length: ${verification.length}');
+      if (verification == jsonString) {
+        print('✅ [STORAGE] Verification: Strings match perfectly!');
+      } else {
+        print('❌ [STORAGE] Verification: Strings DO NOT MATCH!');
+      }
+    } else {
+      print('❌ [STORAGE] Verification: String NOT FOUND in SharedPreferences!');
+    }
+  }
 
   // Load transactions from local storage
   Future<List<Transaction>> loadTransactions(String userId) async {
+    print('📂 [STORAGE] loadTransactions called');
+    print('📝 User ID: $userId');
+
     final prefs = await SharedPreferences.getInstance();
     final key = _getUserKey(_transactionsKey, userId);
+    print('📝 Storage key: $key');
+
     final jsonString = prefs.getString(key);
 
     if (jsonString == null || jsonString.isEmpty) {
+      print('⚠️ [STORAGE] No data found in SharedPreferences');
       return [];
     }
 
+    print('✅ [STORAGE] Found data, length: ${jsonString.length}');
+
     try {
       final List<dynamic> jsonList = jsonDecode(jsonString);
-      return jsonList.map((json) => Transaction.fromJson(json)).toList();
+      print('✅ [STORAGE] JSON decoded, ${jsonList.length} items');
+
+      final transactions = jsonList.map((json) => Transaction.fromJson(json)).toList();
+
+      // Log the specific transaction we're tracking
+      final trackingIndex = transactions.indexWhere((t) => t.id == '1xMMP5Qk6aTmQk6B9lvBimNnNo9oBqUpJjaRR');
+      if (trackingIndex != -1) {
+        print('🔍 [STORAGE] Found tracked transaction at index $trackingIndex');
+        print('📝 Category after load: ${transactions[trackingIndex].spendingCategory.displayName}');
+        print('📝 Custom category after load: ${transactions[trackingIndex].customCategory}');
+        print('📝 Raw JSON: ${jsonList[trackingIndex]}');
+      }
+
+      return transactions;
     } catch (e) {
-      debugPrint('Error loading transactions: $e');
+      debugPrint('❌ [STORAGE] Error loading transactions: $e');
       return [];
     }
   }

@@ -30,20 +30,47 @@ class Transaction {
     final categories = (json['category'] as List?)?.map((e) => e.toString()).toList() ?? ['Other'];
     final merchantName = json['merchant_name'] as String? ?? json['name'] as String? ?? 'Unknown';
 
-    return Transaction(
+    // Check if we have a saved spending category (user may have changed it)
+    SpendingCategory spendingCategory;
+    if (json['spending_category'] != null) {
+      print('🔧 [fromJson] Found saved spending_category: ${json['spending_category']}');
+      // Use the saved category
+      spendingCategory = SpendingCategory.values.firstWhere(
+            (e) => e.name == json['spending_category'],
+        orElse: () => SpendingCategory.fromPlaidCategories(categories, merchantName),
+      );
+    } else {
+      print('🔧 [fromJson] No saved spending_category, calculating from Plaid');
+      // Calculate from Plaid categories (for old data or new imports)
+      spendingCategory = SpendingCategory.fromPlaidCategories(categories, merchantName);
+    }
+
+    final transaction = Transaction(
       id: json['transaction_id'] as String? ?? '',
       accountName: json['account_name'] as String? ?? 'Unknown Account',
       merchantName: merchantName,
       amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
       date: json['date'] as String? ?? '',
       plaidCategories: categories,
-      spendingCategory: SpendingCategory.fromPlaidCategories(categories, merchantName),
+      spendingCategory: spendingCategory,
       customCategory: json['custom_category'] as String?,
     );
+
+    // Debug log for specific transaction
+    if (transaction.id == '1xMMP5Qk6aTmQk6B9lvBimNnNo9oBqUpJjaRR') {
+      print('🔧 [fromJson] Creating transaction from JSON');
+      print('📝 JSON input: $json');
+      print('📝 plaidCategories: $categories');
+      print('📝 merchantName: $merchantName');
+      print('📝 Final spendingCategory: ${transaction.spendingCategory.displayName}');
+      print('📝 customCategory: ${transaction.customCategory}');
+    }
+
+    return transaction;
   }
 
   Map<String, dynamic> toJson() {
-    return {
+    final json = {
       'transaction_id': id,
       'account_name': accountName,
       'merchant_name': merchantName,
@@ -51,8 +78,20 @@ class Transaction {
       'amount': amount,
       'date': date,
       'category': plaidCategories,
+      'spending_category': spendingCategory.name, // ✅ SAVE USER'S CATEGORY CHOICE
       'custom_category': customCategory,
     };
+
+    // Debug log for specific transaction
+    if (id == '1xMMP5Qk6aTmQk6B9lvBimNnNo9oBqUpJjaRR') {
+      print('🔧 [toJson] Converting transaction to JSON');
+      print('📝 spendingCategory: ${spendingCategory.displayName}');
+      print('📝 spendingCategory.name: ${spendingCategory.name}');
+      print('📝 customCategory: $customCategory');
+      print('📝 JSON output: $json');
+    }
+
+    return json;
   }
 
   Transaction copyWith({

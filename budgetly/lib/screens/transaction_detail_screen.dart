@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/transaction.dart';
+import '../services/cloud_sync_service.dart';
 import '../services/transaction_storage_service.dart';
 
 class TransactionDetailScreen extends StatefulWidget {
@@ -249,8 +250,19 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   }
 
   void _updateCategory(SpendingCategory newCategory, String? customCategory) async {
+    print('🔄 [UPDATE CATEGORY] Starting category update...');
+    print('📝 Transaction ID: ${_currentTransaction.id}');
+    print('📝 Old Category: ${_currentTransaction.spendingCategory.displayName}');
+    print('📝 Old Custom Category: ${_currentTransaction.customCategory}');
+    print('📝 New Category: ${newCategory.displayName}');
+    print('📝 New Custom Category: $customCategory');
+
     final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId == null) return;
+    if (userId == null) {
+      print('❌ [UPDATE CATEGORY] No user ID found!');
+      return;
+    }
+    print('✅ User ID: $userId');
 
     setState(() {
       _currentTransaction = _currentTransaction.copyWith(
@@ -258,17 +270,75 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
         customCategory: customCategory,
       );
     });
+    print('✅ [UPDATE CATEGORY] Local state updated');
+    print('📝 Updated transaction category: ${_currentTransaction.displayCategory}');
 
-    // Save immediately to storage
-    final allTransactions = await _storageService.loadTransactions(userId);
-    final index = allTransactions.indexWhere((t) => t.id == _currentTransaction.id);
-    if (index != -1) {
-      allTransactions[index] = _currentTransaction;
-      await _storageService.saveTransactions(allTransactions, userId);
+    try {
+      // Load all transactions
+      print('📂 [UPDATE CATEGORY] Loading all transactions from storage...');
+      final allTransactions = await _storageService.loadTransactions(userId);
+      print('✅ Loaded ${allTransactions.length} transactions');
+
+      // Find the transaction
+      final index = allTransactions.indexWhere((t) => t.id == _currentTransaction.id);
+      print('🔍 Transaction index in list: $index');
+
+      if (index != -1) {
+        print('✅ [UPDATE CATEGORY] Transaction found at index $index');
+        print('📝 Old transaction in list: ${allTransactions[index].displayCategory}');
+
+        // Update the transaction
+        allTransactions[index] = _currentTransaction;
+        print('✅ [UPDATE CATEGORY] Transaction updated in list');
+        print('📝 New transaction in list: ${allTransactions[index].displayCategory}');
+        print('📝 Verify custom category: ${allTransactions[index].customCategory}');
+
+        // Save to storage
+        print('💾 [UPDATE CATEGORY] Saving transactions to storage...');
+        await _storageService.saveTransactions(allTransactions, userId);
+        print('✅ [UPDATE CATEGORY] Transactions saved to storage');
+
+        // Verify save by reloading
+        print('🔍 [UPDATE CATEGORY] Verifying save by reloading...');
+        final reloaded = await _storageService.loadTransactions(userId);
+        final reloadedIndex = reloaded.indexWhere((t) => t.id == _currentTransaction.id);
+        if (reloadedIndex != -1) {
+          print('✅ Verification: Transaction found after reload');
+          print('📝 Reloaded category: ${reloaded[reloadedIndex].displayCategory}');
+          print('📝 Reloaded custom category: ${reloaded[reloadedIndex].customCategory}');
+          print('📝 Reloaded spending category: ${reloaded[reloadedIndex].spendingCategory.displayName}');
+        } else {
+          print('❌ Verification FAILED: Transaction not found after reload!');
+        }
+
+        // OPTIONAL: Sync to cloud if user is authenticated (not anonymous)
+        if (!(FirebaseAuth.instance.currentUser?.isAnonymous ?? true)) {
+          print('☁️ [UPDATE CATEGORY] Attempting cloud sync...');
+          try {
+            final cloudSync = CloudSyncService();
+            await cloudSync.syncTransactions([_currentTransaction]);
+            print('✅ [UPDATE CATEGORY] Cloud sync successful');
+          } catch (e) {
+            print('⚠️ [UPDATE CATEGORY] Cloud sync failed: $e');
+            print('   (This is OK - local storage is primary)');
+          }
+        } else {
+          print('ℹ️ [UPDATE CATEGORY] Skipping cloud sync (anonymous user)');
+        }
+      } else {
+        print('❌ [UPDATE CATEGORY] Transaction NOT FOUND in list!');
+        print('   Looking for ID: ${_currentTransaction.id}');
+        print('   Available IDs: ${allTransactions.map((t) => t.id).take(5).join(", ")}...');
+      }
+    } catch (e, stackTrace) {
+      print('❌ [UPDATE CATEGORY] ERROR: $e');
+      print('Stack trace: $stackTrace');
     }
 
     // Call the callback
+    print('📞 [UPDATE CATEGORY] Calling onTransactionUpdated callback...');
     widget.onTransactionUpdated(_currentTransaction);
+    print('✅ [UPDATE CATEGORY] Callback completed');
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -277,7 +347,11 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
           duration: const Duration(seconds: 2),
         ),
       );
+      print('✅ [UPDATE CATEGORY] SnackBar shown');
     }
+
+    print('✅ [UPDATE CATEGORY] Update complete!');
+    print('=' * 60);
   }
 
   @override

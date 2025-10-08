@@ -219,22 +219,36 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _fetchTransactions() async {
-    if (accessToken == null) return;
+    print('🔄 [FETCH] Starting Plaid transaction fetch...');
+
+    if (accessToken == null) {
+      print('❌ [FETCH] No access token!');
+      return;
+    }
 
     final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId == null) return;
+    if (userId == null) {
+      print('❌ [FETCH] No user ID!');
+      return;
+    }
 
     setState(() => isSyncing = true);
 
     try {
+      print('🌐 [FETCH] Fetching from Plaid...');
       final newTransactions = await _plaidService.getTransactions(accessToken!);
+      print('✅ [FETCH] Got ${newTransactions.length} transactions from Plaid');
 
-      // Merge with existing saved transactions (preserving user edits)
+      print('🔄 [FETCH] Merging with existing transactions...');
+      print('📝 Current transaction count: ${transactions.length}');
+
+      // CRITICAL: Merge preserves existing transactions (with user edits)
       final merged = await _transactionStorage.mergeTransactions(
-        transactions,
-        newTransactions,
+        transactions,  // Current transactions (may have user edits)
+        newTransactions,  // New transactions from Plaid
         userId,
       );
+      print('✅ [FETCH] Merge complete. Result: ${merged.length} transactions');
 
       // Save last sync time
       await _transactionStorage.saveLastSyncTime(DateTime.now(), userId);
@@ -245,6 +259,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           filteredTransactions = merged;
           isSyncing = false;
         });
+        print('✅ [FETCH] State updated');
 
         await _checkForNotifications();
 
@@ -255,7 +270,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           _showSuccess('Synced! Your transactions are up to date');
         }
       }
+      print('✅ [FETCH] Fetch complete!');
+      print('=' * 60);
     } catch (e) {
+      print('❌ [FETCH] Error: $e');
       _showError('Failed to fetch transactions');
       if (mounted) {
         setState(() => isSyncing = false);
@@ -447,28 +465,55 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   void _onTransactionTap(Transaction transaction) async {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId == null) return;
+    print('🖱️ [TAP] Transaction tapped');
+    print('📝 Transaction ID: ${transaction.id}');
+    print('📝 Current category: ${transaction.displayCategory}');
 
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) {
+      print('❌ [TAP] No user ID found!');
+      return;
+    }
+
+    print('➡️ [TAP] Navigating to detail screen...');
     await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => TransactionDetailScreen(
           transaction: transaction,
           onTransactionUpdated: (updatedTransaction) {
+            print('📞 [TAP] onTransactionUpdated callback received');
+            print('📝 Updated category: ${updatedTransaction.displayCategory}');
             // DO NOTHING HERE - we'll reload after navigation
           },
         ),
       ),
     );
 
+    print('⬅️ [TAP] Returned from detail screen');
+
     // Reload transactions after coming back
     if (mounted) {
+      print('🔄 [TAP] Reloading transactions from storage...');
       final reloaded = await _transactionStorage.loadTransactions(userId);
+      print('✅ [TAP] Loaded ${reloaded.length} transactions');
+
+      // Find the transaction we just edited
+      final updatedIndex = reloaded.indexWhere((t) => t.id == transaction.id);
+      if (updatedIndex != -1) {
+        print('🔍 [TAP] Found updated transaction at index $updatedIndex');
+        print('📝 Updated category: ${reloaded[updatedIndex].displayCategory}');
+        print('📝 Custom category: ${reloaded[updatedIndex].customCategory}');
+      } else {
+        print('❌ [TAP] Transaction not found in reloaded list!');
+      }
+
       setState(() {
         transactions = reloaded;
         filteredTransactions = reloaded;
       });
+      print('✅ [TAP] State updated with reloaded transactions');
+      print('=' * 60);
     }
   }
 
