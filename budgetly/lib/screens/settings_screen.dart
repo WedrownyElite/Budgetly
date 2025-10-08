@@ -67,27 +67,27 @@ class SettingsScreen extends StatelessWidget {
 
         // Get current user ID before signing out
         final userId = authService.userId;
+        if (userId == null) {
+          throw Exception('No user ID found');
+        }
 
         // Get the current access token
-        final accessToken = await storageService.getAccessToken();
+        final accessToken = await storageService.getAccessToken(userId: userId);
 
         // If user has a Plaid token and is authenticated (not anonymous)
-        if (userId != null && accessToken != null && !authService.currentUser!.isAnonymous) {
+        if (accessToken != null && !authService.currentUser!.isAnonymous) {
           // Save token to cloud before deleting locally
           await storageService.savePlaidTokenToCloud(userId, accessToken);
         }
 
-        // Delete local token (this clears it from the device)
-        await storageService.deleteAccessToken();
+        // Delete local token for THIS user (this clears it from the device)
+        await storageService.deleteAccessToken(userId);
 
         // Sign out from Firebase
         await authService.signOut();
 
         if (context.mounted) {
-          // Close loading dialog
-          Navigator.pop(context);
-
-          // Navigate to login screen
+          Navigator.pop(context); // Close loading dialog
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => const LoginScreen()),
                 (route) => false,

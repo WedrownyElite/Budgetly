@@ -111,10 +111,10 @@ class CloudSyncService {
 
     try {
       // Collect all data
-      final transactions = await _transactionStorage.loadTransactions();
+      final transactions = await _transactionStorage.loadTransactions(currentUserId);
       final budgets = await _budgetStorage.getBudgets();
       final goals = await _budgetStorage.getGoals();
-      final customCategories = await _transactionStorage.loadCustomCategories();
+      final customCategories = await _transactionStorage.loadCustomCategories(currentUserId);
 
       final backupData = {
         'version': '1.0',
@@ -252,7 +252,7 @@ class CloudSyncService {
       final transactions = (data['transactions'] as List)
           .map((json) => models.Transaction.fromJson(json))
           .toList();
-      await _transactionStorage.saveTransactions(transactions);
+      await _transactionStorage.saveTransactions(transactions, currentUserId);
 
       // Restore budgets
       final budgets = (data['budgets'] as List)
@@ -270,7 +270,7 @@ class CloudSyncService {
       final customCategories = (data['custom_categories'] as List)
           .map((e) => e.toString())
           .toList();
-      await _transactionStorage.saveCustomCategories(customCategories);
+      await _transactionStorage.saveCustomCategories(customCategories, currentUserId);
 
       return RestoreResult.success();
     } catch (e) {

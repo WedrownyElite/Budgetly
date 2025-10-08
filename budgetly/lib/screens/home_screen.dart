@@ -75,22 +75,23 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _checkConnectionStatus() async {
     setState(() => isLoading = true);
 
-    // Load saved transactions first
-    final savedTransactions = await _transactionStorage.loadTransactions();
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+
+    // Load saved transactions for THIS user
+    final savedTransactions = userId != null
+        ? await _transactionStorage.loadTransactions(userId)
+        : <Transaction>[];
 
     // Check local token first
-    String? token = await _storageService.getAccessToken();
+    String? token = userId != null
+        ? await _storageService.getAccessToken(userId: userId)
+        : null;
 
     // If no local token, try to get from cloud for authenticated users
-    if (token == null) {
-      final userId = FirebaseAuth.instance.currentUser?.uid;
-      if (userId != null && !(FirebaseAuth.instance.currentUser?.isAnonymous ?? true)) {
-        // Only fetch from cloud if user is authenticated (not anonymous)
-        token = await _storageService.getPlaidTokenFromCloud(userId);
-        if (token != null) {
-          // Restore to local storage
-          await _storageService.saveAccessToken(token);
-        }
+    if (token == null && userId != null && !(FirebaseAuth.instance.currentUser?.isAnonymous ?? true)) {
+      token = await _storageService.getPlaidTokenFromCloud(userId);
+      if (token != null) {
+        await _storageService.saveAccessToken(token, userId);
       }
     }
 
@@ -105,8 +106,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
       if (isConnected) {
         _handleConnectionAnimation();
-
-        // If we have a token, fetch new transactions
         if (token != null) {
           _fetchTransactions();
         }
@@ -140,12 +139,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       PlaidLink.onSuccess.listen((success) async {
         final token = await _plaidService.exchangePublicToken(success.publicToken);
         if (token != null) {
+          final userId = FirebaseAuth.instance.currentUser?.uid;
+          if (userId == null) return;
+
           // Save locally first
-          await _storageService.saveAccessToken(token);
+          await _storageService.saveAccessToken(token, userId);
 
           // Save to cloud for authenticated users (not anonymous)
-          final userId = FirebaseAuth.instance.currentUser?.uid;
-          if (userId != null && !(FirebaseAuth.instance.currentUser?.isAnonymous ?? true)) {
+          if (!(FirebaseAuth.instance.currentUser?.isAnonymous ?? true)) {
             await _storageService.savePlaidTokenToCloud(userId, token);
           }
 
@@ -157,8 +158,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               isSyncing = true;
             });
             _handleConnectionAnimation();
-
-            // Fetch transactions AFTER UI update
             _fetchTransactions();
             _showSuccess('Bank account connected successfully!');
           }
@@ -187,13 +186,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _loadDebugData() async {
     setState(() => isLoading = true);
 
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) {
+      _showError('Must be signed in to load debug data');
+      setState(() => isLoading = false);
+      return;
+    }
+
     try {
       final debugTransactions = DebugDataService.getDebugTransactions();
 
-      // Merge with existing transactions
       final merged = await _transactionStorage.mergeTransactions(
         transactions,
         debugTransactions,
+        userId,
       );
 
       setState(() {
@@ -215,6 +221,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _fetchTransactions() async {
     if (accessToken == null) return;
 
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+
     setState(() => isSyncing = true);
 
     try {
@@ -224,16 +233,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       final merged = await _transactionStorage.mergeTransactions(
         transactions,
         newTransactions,
+        userId,
       );
 
       // Save last sync time
-      await _transactionStorage.saveLastSyncTime(DateTime.now());
+      await _transactionStorage.saveLastSyncTime(DateTime.now(), userId);
 
       if (mounted) {
         setState(() {
           transactions = merged;
           filteredTransactions = merged;
-          isSyncing = false;  // Ensure syncing is set to false
+          isSyncing = false;
         });
 
         await _checkForNotifications();
@@ -248,7 +258,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     } catch (e) {
       _showError('Failed to fetch transactions');
       if (mounted) {
-        setState(() => isSyncing = false);  // Ensure syncing is set to false even on error
+        setState(() => isSyncing = false);
       }
     }
   }
@@ -314,19 +324,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
     if (confirmed != true) return;
 
-    // Get user ID before deleting
     final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
 
     // Delete from cloud (if authenticated user)
-    if (userId != null && !(FirebaseAuth.instance.currentUser?.isAnonymous ?? true)) {
+    if (!(FirebaseAuth.instance.currentUser?.isAnonymous ?? true)) {
       await _storageService.deletePlaidTokenFromCloud(userId);
     }
 
     // Delete from local storage
-    await _storageService.deleteAccessToken();
+    await _storageService.deleteAccessToken(userId);
 
-    // Clear transaction data
-    await _transactionStorage.clearAllData();
+    // Clear transaction data for THIS user
+    await _transactionStorage.clearAllData(userId);
 
     if (mounted) {
       if (MediaQuery.of(context).disableAnimations) {
@@ -368,8 +378,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               subtitle: const Text('Reset app to initial state'),
               onTap: () async {
                 Navigator.pop(context);
-                await _storageService.deleteAccessToken();
-                await _transactionStorage.clearAllData();
+
+                final userId = FirebaseAuth.instance.currentUser?.uid;
+                if (userId != null) {
+                  await _storageService.deleteAccessToken(userId);  // Add userId
+                  await _transactionStorage.clearAllData(userId);   // Add userId
+                }
+
                 setState(() {
                   isConnected = false;
                   accessToken = null;
@@ -432,32 +447,27 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   void _onTransactionTap(Transaction transaction) async {
-    final result = await Navigator.push(
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => TransactionDetailScreen(
           transaction: transaction,
-          onTransactionUpdated: (updatedTransaction) async {
-            await _transactionStorage.updateTransaction(
-              updatedTransaction,
-              transactions,
-            );
-
-            // Reload transactions
-            final reloaded = await _transactionStorage.loadTransactions();
-            setState(() {
-              transactions = reloaded;
-              filteredTransactions = reloaded;
-            });
+          onTransactionUpdated: (updatedTransaction) {
+            // DO NOTHING HERE - we'll reload after navigation
           },
         ),
       ),
     );
 
-    if (result != null) {
-      // Transaction was updated
+    // Reload transactions after coming back
+    if (mounted) {
+      final reloaded = await _transactionStorage.loadTransactions(userId);
       setState(() {
-        filteredTransactions = transactions;
+        transactions = reloaded;
+        filteredTransactions = reloaded;
       });
     }
   }

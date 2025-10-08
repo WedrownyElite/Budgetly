@@ -12,17 +12,25 @@ class StorageService {
   final _firestore = FirebaseFirestore.instance;
   final _keyManager = SecureKeyManager();
 
+  String _getUserKey(String baseKey, String userId) {
+    return '${baseKey}_$userId';
+  }
+  
   // Local storage (for current session)
-  Future<String?> getAccessToken() async {
-    return await _storage.read(key: AppConstants.accessTokenKey);
+  Future<String?> getAccessToken({String? userId}) async {
+    if (userId == null) return null;
+    final key = _getUserKey(AppConstants.accessTokenKey, userId);
+    return await _storage.read(key: key);
   }
 
-  Future<void> saveAccessToken(String token) async {
-    await _storage.write(key: AppConstants.accessTokenKey, value: token);
+  Future<void> saveAccessToken(String token, String userId) async {
+    final key = _getUserKey(AppConstants.accessTokenKey, userId);
+    await _storage.write(key: key, value: token);
   }
 
-  Future<void> deleteAccessToken() async {
-    await _storage.delete(key: AppConstants.accessTokenKey);
+  Future<void> deleteAccessToken(String userId) async {
+    final key = _getUserKey(AppConstants.accessTokenKey, userId);
+    await _storage.delete(key: key);
   }
 
   Future<String> _encryptData(String plainText) async {

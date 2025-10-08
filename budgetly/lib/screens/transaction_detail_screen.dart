@@ -1,5 +1,6 @@
 ﻿// budgetly/lib/screens/transaction_detail_screen.dart
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/transaction.dart';
 import '../services/transaction_storage_service.dart';
 
@@ -37,7 +38,10 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   }
 
   Future<void> _loadCustomCategories() async {
-    final categories = await _storageService.loadCustomCategories();
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+
+    final categories = await _storageService.loadCustomCategories(userId);
     setState(() => _customCategories = categories);
   }
 
@@ -184,9 +188,12 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
+              final userId = FirebaseAuth.instance.currentUser?.uid;
+              if (userId == null) return;
+
               final categoryName = _customCategoryController.text.trim();
               if (categoryName.isNotEmpty) {
-                await _storageService.addCustomCategory(categoryName);
+                await _storageService.addCustomCategory(categoryName, userId);
                 await _loadCustomCategories();
                 _customCategoryController.clear();
                 if (context.mounted) {
@@ -225,9 +232,12 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     );
 
     if (confirmed == true) {
-      final categories = await _storageService.loadCustomCategories();
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      if (userId == null) return;
+
+      final categories = await _storageService.loadCustomCategories(userId);
       categories.remove(category);
-      await _storageService.saveCustomCategories(categories);
+      await _storageService.saveCustomCategories(categories, userId);
       await _loadCustomCategories();
 
       if (mounted) {
@@ -238,7 +248,10 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     }
   }
 
-  void _updateCategory(SpendingCategory newCategory, String? customCategory) {
+  void _updateCategory(SpendingCategory newCategory, String? customCategory) async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+
     setState(() {
       _currentTransaction = _currentTransaction.copyWith(
         spendingCategory: newCategory,
@@ -246,14 +259,25 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       );
     });
 
+    // Save immediately to storage
+    final allTransactions = await _storageService.loadTransactions(userId);
+    final index = allTransactions.indexWhere((t) => t.id == _currentTransaction.id);
+    if (index != -1) {
+      allTransactions[index] = _currentTransaction;
+      await _storageService.saveTransactions(allTransactions, userId);
+    }
+
+    // Call the callback
     widget.onTransactionUpdated(_currentTransaction);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Category changed to "${_currentTransaction.displayCategory}"'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Category changed to "${_currentTransaction.displayCategory}"'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   @override
